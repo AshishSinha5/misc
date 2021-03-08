@@ -1,1 +1,1 @@
-# PyTorch MLP model with custom daataloader
+# PyTorch MLP model with custom dataloader
