@@ -1,1 +1,5 @@
 data/
+author_identify.ipynb
+classify_names.ipynb
+generate_names.ipynb
+.ipynb_checkpoints/
