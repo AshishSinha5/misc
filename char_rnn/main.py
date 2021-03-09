@@ -8,6 +8,8 @@ from torchtext.data.utils import get_tokenizer
 from collections import Counter
 from torchtext.vocab import Vocab
 
+from dataloader import AuthorDataset
+
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 author_code = {
@@ -22,8 +24,18 @@ label_code = {
     'MWS': 2
 }
 
-def get_tokenized_data(data):
-    pass
+tokenizer = get_tokenizer('basic_english')
+
+
+def get_tokenized_data(args, X, y, X_test):
+    valid_ratio = args.valid_ratio
+    X_train, X_valid, y_train, y_valid = train_test_split(X, y, test_size=valid_ratio, stratify=y)
+    counter = Counter()
+    for line in X_train:
+        counter.update(tokenizer(line))
+    vocab = Vocab(counter, min_freq=1)
+    return list(X_train), list(X_valid), list(y_train), list(y_valid), vocab
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -37,14 +49,18 @@ if __name__ == "__main__":
 
     train_file_path = args.train_file_path
     test_file_path = args.test_file_path
-    valid_ratio = args.valid_ratio
     train_df = pd.read_csv(train_file_path)
     test_df = pd.read_csv(test_file_path)
 
-
     X = train_df['text']
     y = train_df['author']
-
-    X_train, X_valid, y_train, y_valid = train_test_split(X, y, test_size=test_size)
-
-    tokenizer = get_tokenizer('basic_english')
+    X_test = test_df['text']
+    X_train, X_valid, y_train, y_valid, vocab = get_tokenized_data(args, X, y, X_test)
+    print(X_train[0])
+    print(y_train[0])
+    train_dataset = AuthorDataset(X_train, y_train, vocab, tokenizer, label_code, train=True)
+    train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, collate_fn=train_dataset.collate_function)
+    for x, y in train_loader:
+        print(x[0])
+        print(y)
+        break
