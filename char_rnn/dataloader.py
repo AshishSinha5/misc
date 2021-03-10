@@ -38,11 +38,19 @@ class AuthorDataset(Dataset):
             return x, y
         return x
 
-    def collate_function(self, data):
+    def collate_function(self, batch):
+        offsets = [0]
         if self.train:
-            (x, y) = zip(*data)
-            x = list(x)
-            return x, torch.tensor(y)
+            (text_list, label_list) = zip(*batch)
+            text_list = torch.cat(text_list)
+            label_list = torch.tensor(label_list)
+            for _text, _ in batch:
+                offsets.append(_text.size(0))
+            offsets = torch.tensor(offsets[:-1]).cumsum(dim=0)
+            return label_list.to(device), text_list.to(device), offsets.to(device)
+
+
+
 
 
 
