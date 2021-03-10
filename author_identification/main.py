@@ -11,7 +11,7 @@ from torchtext.vocab import Vocab
 
 from dataloader import AuthorDataset
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 author_code = {
     'EAP': 'Edgar Allan Poe',
@@ -28,8 +28,7 @@ label_code = {
 tokenizer = get_tokenizer('basic_english')
 
 
-def get_tokenized_data(args, X, y, X_test):
-    valid_ratio = args.valid_ratio
+def get_tokenized_data(valid_ratio, X, y, X_test):
     X_train, X_valid, y_train, y_valid = train_test_split(X, y, test_size=valid_ratio, stratify=y)
     counter = Counter()
     for line in X_train:
@@ -38,13 +37,29 @@ def get_tokenized_data(args, X, y, X_test):
     return list(X_train), list(X_valid), list(y_train), list(y_valid), vocab
 
 
-def train(model, dataloader, optimizer, criterion):
+def get_dataset(train_file_path, test_file_path, valid_ratio):
+    train_df = pd.read_csv(train_file_path)
+    test_df = pd.read_csv(test_file_path)
+
+    X = train_df['text']
+    y = train_df['author']
+    X_test = test_df['text']
+    X_train, X_valid, y_train, y_valid, vocab = get_tokenized_data(valid_ratio, X, y, X_test)
+
+    train_dataset = AuthorDataset(X_train, y_train, vocab, tokenizer, label_code, train=True)
+    valid_dataset = AuthorDataset(X_valid, y_valid, vocab, tokenizer, label_code, train=True)
+
+    return train_dataset, valid_dataset, vocab
+
+
+def train(model, dataloader, optimizer, criterion, epoch):
     model.train()
     total_acc, total_count = 0, 0
     log_interval = 500
     start_time = time.time()
 
     for idx, (label, text, offset) in enumerate(dataloader):
+        label, text, offset = label.to(device), text.to(device), offset.to(device)
         optimizer.zero_grad()
         predicted_label = model(text, offset)
         loss = criterion(predicted_label, label)
@@ -67,6 +82,7 @@ def evaluate(model, dataloader, criterion):
     total_acc, total_count = 0, 0
     with torch.no_grad():
         for idx, (label, text, offset) in enumerate(dataloader):
+            label, text, offset = label.to(device), text.to(device), offset.to(device)
             predicted = model(text, offset)
             loss = criterion(predicted, label)
             total_acc += (predicted.argmax(1) == label).sum().item()
@@ -88,28 +104,15 @@ if __name__ == "__main__":
 
     train_file_path = args.train_file_path
     test_file_path = args.test_file_path
-    train_df = pd.read_csv(train_file_path)
-    test_df = pd.read_csv(test_file_path)
+    valid_ratio = args.valid_ratio
 
-    X = train_df['text']
-    y = train_df['author']
-    X_test = test_df['text']
-    X_train, X_valid, y_train, y_valid, vocab = get_tokenized_data(args, X, y, X_test)
-
-    train_dataset = AuthorDataset(X_train, y_train, vocab, tokenizer, label_code, train=True)
-    valid_dataset = AuthorDataset(X_valid, y_valid, vocab, tokenizer, label_code, train=True)
+    train_dataset, valid_dataset, vocab = get_dataset(train_file_path, test_file_path)
 
     train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True,
                               collate_fn=train_dataset.collate_function)
     valid_loader = DataLoader(valid_dataset, batch_size=1000, shuffle=False,
                               collate_fn=valid_dataset.collate_function)
 
-    """for label, text, offset in train_loader:
-        print(label)
-        print(text)
-        print(text.size())
-        print(offset)
-        break"""
 
     num_class = 3
     vocab_size = len(vocab)
@@ -127,7 +130,7 @@ if __name__ == "__main__":
 
     for epoch in range(1, epochs + 1):
         epoch_start_time = time.time()
-        train(model, train_loader, optimizer, criterion)
+        train(model, train_loader, optimizer, criterion, epoch)
         acc_val = evaluate(model, valid_loader, criterion)
         if total_acc is not None and total_acc > acc_val:
             scheduler.step()
@@ -139,5 +142,3 @@ if __name__ == "__main__":
                                                time.time() - epoch_start_time,
                                                acc_val))
         print('-' * 59)
-
-

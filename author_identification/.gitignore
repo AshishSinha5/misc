@@ -1,4 +1,5 @@
 data/
+optuna_experiments/
 author_identify.ipynb
 classify_names.ipynb
 generate_names.ipynb

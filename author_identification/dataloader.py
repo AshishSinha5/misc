@@ -1,14 +1,7 @@
 import torch
-import numpy as np
-import pandas as pd
-from torch.utils.data import Dataset, DataLoader
-from torch.nn.utils.rnn import pad_sequence
-from sklearn.model_selection import train_test_split
-from torchtext.data.utils import get_tokenizer
-from collections import Counter
-from torchtext.vocab import Vocab
+from torch.utils.data import Dataset
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 
 def preprocess(s):
