@@ -10,9 +10,10 @@ def preprocess(s):
 
 class AuthorDataset(Dataset):
 
-    def __init__(self, X, y, vocab, tokenizer, label_code=None, train=True):
+    def __init__(self, X, y, vocab, tokenizer, id=None, label_code=None, train=True):
         self.X = X
         self.y = y
+        self.ID = id
         self.train = train
         self.vocab = vocab
         self.tokenizer = tokenizer
@@ -29,7 +30,9 @@ class AuthorDataset(Dataset):
         if self.train:
             y = self.label_code[self.y[index]]
             return x, y
-        return x
+        else:
+            id = self.ID[index]
+            return x, id
 
     def collate_function(self, batch):
         offsets = [0]
@@ -41,6 +44,14 @@ class AuthorDataset(Dataset):
                 offsets.append(_text.size(0))
             offsets = torch.tensor(offsets[:-1]).cumsum(dim=0)
             return label_list.to(device), text_list.to(device), offsets.to(device)
+        else:
+            (text_list, id) = zip(*batch)
+            text_list = torch.cat(text_list)
+            for _text, _ in batch:
+                offsets.append(_text.size(0))
+            offsets = torch.tensor(offsets[:-1]).cumsum(dim=0)
+            return text_list.to(device), offsets.to(device), list(id)
+
 
 
 
