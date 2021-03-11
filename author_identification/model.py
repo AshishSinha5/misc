@@ -1,8 +1,9 @@
 from torch import nn
+import torch.nn.functional as F
 
 
 class LinearEmbeddingModel(nn.Module):
-    def __init__(self, vocab_size, num_class, num_layers, out_feats, dropouts, embed_dim=32, init_range=0.1):
+    def __init__(self, vocab_size, num_class, num_layers, out_feats=None, dropouts=None, embed_dim=32, init_range=0.1):
         super(LinearEmbeddingModel, self).__init__()
         self.num_layers = num_layers
         self.out_feats = out_feats

@@ -5,7 +5,7 @@ from torch.utils.data import DataLoader
 import optuna
 from optuna.trial import TrialState
 from model import LinearEmbeddingModel
-from main import get_dataset, train, evaluate
+from main import get_dataset, train, evaluate, test
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -51,7 +51,7 @@ def objective(trial):
 
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True,
                               collate_fn=train_dataset.collate_function)
-    valid_loader = DataLoader(valid_dataset, batch_size=1000, shuffle=False,
+    valid_loader = DataLoader(valid_dataset, batch_size=len(valid_dataset), shuffle=False,
                               collate_fn=valid_dataset.collate_function)
 
     total_acc = None
@@ -59,24 +59,25 @@ def objective(trial):
     for epoch in range(1, epochs + 1):
         epoch_start_time = time.time()
         train(model, train_loader, optimizer, criterion, epoch)
-        acc_val = evaluate(model, valid_loader, criterion)
+        acc_val, loss_val = evaluate(model, valid_loader, criterion)
         if total_acc is not None and total_acc > acc_val:
             scheduler.step()
         else:
             total_acc = acc_val
         print('-' * 59)
         print('| end of epoch {:3d} | time: {:5.2f}s | '
-              'valid accuracy {:8.3f} '.format(epoch,
-                                               time.time() - epoch_start_time,
-                                               acc_val))
+              'valid accuracy {:8.3f} | valid loss {:8.5f} '.format(epoch,
+                                                                   time.time() - epoch_start_time,
+                                                                   acc_val, loss_val))
         print('-' * 59)
 
     return acc_val
 
 
+
 if __name__ == "__main__":
     study = optuna.create_study(direction="maximize")
-    study.optimize(objective, n_trials=50)
+    study.optimize(objective, n_trials=1)
 
     pruned_trials = study.get_trials(deepcopy=False, states=[TrialState.PRUNED])
     complete_trials = study.get_trials(deepcopy=False, states=[TrialState.COMPLETE])
