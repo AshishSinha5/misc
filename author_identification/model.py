@@ -1,5 +1,4 @@
 from torch import nn
-import torch.nn.functional as F
 
 
 class LinearEmbeddingModel(nn.Module):
@@ -22,6 +21,7 @@ class LinearEmbeddingModel(nn.Module):
             in_feat = out_feat
         if len(self.layers):
             self.layers = nn.ModuleList(self.layers)
+        self.bn = nn.BatchNorm1d(in_feat)
         self.op = nn.Linear(in_feat, num_class)
         self.init_weights()
 
@@ -34,6 +34,23 @@ class LinearEmbeddingModel(nn.Module):
         x = self.embedding(text, offsets)
         for layer in self.layers:
             x = layer(x)
+        x = self.bn(x)
         x = self.op(x)
         return x
+
+
+class entityEmbeddingModel(nn.Module):
+    def __init__(self, vocab_size, num_class, embed_dim=32, hidden_dim=16):
+        super(entityEmbeddingModel, self).__init__()
+        self.embed_dim = embed_dim
+        self.embedding = nn.Embedding(vocab_size, self.embed_dim)
+        self.lstm = nn.LSTM(embed_dim, hidden_dim, batch_first=True)
+        self.op = nn.Linear(hidden_dim, num_class)
+
+    def forward(self, text):
+        x = self.embedding(text)
+        lstm_op, (ht, ct) = self.lstm(x)
+        x = self.op(ht[-1])
+        return x
+
 

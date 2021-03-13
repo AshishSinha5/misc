@@ -7,7 +7,6 @@ import torch.optim as optim
 from torch.optim.lr_scheduler import StepLR
 import argparse
 
-
 class linear_nn(nn.Module):
 
     def __init__(self):

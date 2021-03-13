@@ -30,11 +30,17 @@ label_code = {
 tokenizer = get_tokenizer('basic_english')
 
 
+def preprocess(s):
+    return ''.join(e for e in s.lower() if (e.isalnum() or e.isspace()))
+
+
 def get_tokenized_data(valid_ratio, X, y, X_test):
+    X = list(map(lambda x: preprocess(x), X))
     X_train, X_valid, y_train, y_valid = train_test_split(X, y, test_size=valid_ratio, stratify=y)
     counter = Counter()
     for line in X_train:
         counter.update(tokenizer(line))
+
     vocab = Vocab(counter, min_freq=1)
     return list(X_train), list(X_valid), list(y_train), list(y_valid), vocab
 
@@ -57,6 +63,7 @@ def get_dataset(train_file_path, test_file_path, valid_ratio):
 def get_test_dataset(test_file_path, vocab):
     test_df = pd.read_csv(test_file_path)
     X_test = test_df['text']
+    X_test = list(map(lambda x: preprocess(x), X_test))
     id = test_df['id']
     test_dataset = AuthorDataset(X_test, None, vocab, tokenizer, id, label_code, train=False)
     return test_dataset
@@ -101,6 +108,7 @@ def evaluate(model, dataloader, criterion):
 
     return total_acc / total_count, total_loss
 
+
 def test(model, dataloader):
     model.eval()
     predictions, ids = [], []
@@ -111,7 +119,7 @@ def test(model, dataloader):
             predicted = F.softmax(predicted, dim=1)
             predictions.append(predicted)
             ids.append(id)
-    #print([item for sublist in predictions for item in sublist.item()])
+    # print([item for sublist in predictions for item in sublist.item()])
     predictions = np.reshape([item for sublist in predictions for item in sublist.tolist()], (-1, 3))
     ids = np.array([item for sublist in ids for item in sublist])
     eap, hpl, mws = predictions[:, 0], predictions[:, 1], predictions[:, 2]
@@ -123,9 +131,6 @@ def test(model, dataloader):
     }
     df = pd.DataFrame(data=data)
     df.to_csv('outputs/result.csv', index=False)
-
-
-
 
 
 if __name__ == "__main__":
@@ -149,12 +154,18 @@ if __name__ == "__main__":
     test_dataset = get_test_dataset(test_file_path, vocab)
 
     train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True,
-                              collate_fn=train_dataset.collate_function)
+                              collate_fn=train_dataset.char_level_collate)
     valid_loader = DataLoader(valid_dataset, batch_size=len(valid_dataset), shuffle=False,
                               collate_fn=valid_dataset.collate_function)
-
     test_loader = DataLoader(test_dataset, batch_size=len(test_dataset), shuffle=False,
-                             collate_fn=test_dataset.collate_function)
+                             collate_fn=test_dataset.char_level_collate)
+
+
+    for i, (label, text) in enumerate(train_loader):
+        print(label)
+        print(text.shape)
+        print(text)
+        break
 
     num_class = 3
     vocab_size = len(vocab)

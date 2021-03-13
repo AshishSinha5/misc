@@ -2,6 +2,7 @@ import time
 import torch
 import pickle
 from torch.utils.data import DataLoader
+import torch.nn.functional as F
 import optuna
 from optuna.trial import TrialState
 from model import LinearEmbeddingModel
@@ -50,7 +51,7 @@ def objective(trial):
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, 1, gamma=0.1)
 
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True,
-                              collate_fn=train_dataset.collate_function)
+                              collate_fn=train_dataset.collate_function, drop_last=True)
     valid_loader = DataLoader(valid_dataset, batch_size=len(valid_dataset), shuffle=False,
                               collate_fn=valid_dataset.collate_function)
 
@@ -77,7 +78,7 @@ def objective(trial):
 
 if __name__ == "__main__":
     study = optuna.create_study(direction="maximize")
-    study.optimize(objective, n_trials=1)
+    study.optimize(objective, n_trials=50)
 
     pruned_trials = study.get_trials(deepcopy=False, states=[TrialState.PRUNED])
     complete_trials = study.get_trials(deepcopy=False, states=[TrialState.COMPLETE])

@@ -4,10 +4,6 @@ from torch.utils.data import Dataset
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 
-def preprocess(s):
-    return ''.join(e for e in s.lower() if (e.isalnum() or e.isspace()))
-
-
 class AuthorDataset(Dataset):
 
     def __init__(self, X, y, vocab, tokenizer, id=None, label_code=None, train=True):
@@ -26,7 +22,7 @@ class AuthorDataset(Dataset):
         return [self.vocab[tokens] for tokens in self.tokenizer(line)]
 
     def __getitem__(self, index):
-        x = torch.tensor(self.text_pipeline(preprocess(self.X[index])))
+        x = torch.tensor(self.text_pipeline(self.X[index]))
         if self.train:
             y = self.label_code[self.y[index]]
             return x, y
@@ -52,10 +48,14 @@ class AuthorDataset(Dataset):
             offsets = torch.tensor(offsets[:-1]).cumsum(dim=0)
             return text_list.to(device), offsets.to(device), list(id)
 
+    def char_level_collate(self, batch):
+        if self.train:
+            (text_list, label_list) = zip(*batch)
+            padded_tensors = torch.nn.utils.rnn.pad_sequence([torch.tensor(l) for l in text_list], batch_first=True)
+            label_list = torch.tensor(label_list)
+            return label_list.to(device), padded_tensors.to(device)
 
-
-
-
-
-
-
+        else:
+            (text_list, id) = zip(*batch)
+            padded_tensors = torch.nn.utils.rnn.pad_sequence([torch.tensor(l) for l in text_list], batch_first=True)
+            return text_list.to(device), list(id)
