@@ -5,15 +5,18 @@ import pandas as pd
 import numpy as np
 from torch.utils.data import DataLoader
 import torch.nn.functional as F
-from model import LinearEmbeddingModel
+from model import LinearEmbeddingModel, entityEmbeddingModel
 from sklearn.model_selection import train_test_split
 from torchtext.data.utils import get_tokenizer
 from collections import Counter
 from torchtext.vocab import Vocab
-
+from nltk.stem import WordNetLemmatizer
+from nltk.corpus import stopwords
 from dataloader import AuthorDataset
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+lemmatizer = WordNetLemmatizer()
+stop_words = set(stopwords.words("english"))
 
 author_code = {
     'EAP': 'Edgar Allan Poe',
@@ -31,7 +34,11 @@ tokenizer = get_tokenizer('basic_english')
 
 
 def preprocess(s):
-    return ''.join(e for e in s.lower() if (e.isalnum() or e.isspace()))
+    x = ''.join(e for e in s.lower() if (e.isalnum() or e.isspace()))
+    x = ' '.join(lemmatizer.lemmatize(token) for token in x.split(" "))
+    x = ' '.join(lemmatizer.lemmatize(token, "v") for token in x.split(" "))
+    x = ' '.join(word for word in x.split(" ") if not word in stop_words)
+    return x
 
 
 def get_tokenized_data(valid_ratio, X, y, X_test):
@@ -75,10 +82,9 @@ def train(model, dataloader, optimizer, criterion, epoch):
     log_interval = 500
     start_time = time.time()
 
-    for idx, (label, text, offset) in enumerate(dataloader):
-        label, text, offset = label.to(device), text.to(device), offset.to(device)
-        optimizer.zero_grad()
-        predicted_label = model(text, offset)
+    for idx, (label, text) in enumerate(dataloader):
+        label, text = label.to(device).long(), text.to(device).long()
+        predicted_label = model(text)
         loss = criterion(predicted_label, label)
         loss.backward()
         torch.nn.utils.clip_grad_norm_(model.parameters(), 0.1)
@@ -99,9 +105,9 @@ def evaluate(model, dataloader, criterion):
     model.eval()
     total_acc, total_loss, total_count = 0, 0, 0
     with torch.no_grad():
-        for idx, (label, text, offset) in enumerate(dataloader):
-            label, text, offset = label.to(device), text.to(device), offset.to(device)
-            predicted = model(text, offset)
+        for idx, (label, text) in enumerate(dataloader):
+            label, text= label.to(device), text.to(device)
+            predicted = model(text)
             total_loss += criterion(predicted, label)
             total_acc += (predicted.argmax(1) == label).sum().item()
             total_count += label.size(0)
@@ -113,9 +119,9 @@ def test(model, dataloader):
     model.eval()
     predictions, ids = [], []
     with torch.no_grad():
-        for idx, (text, offset, id) in enumerate(dataloader):
-            text, offset = text.to(device), offset.to(device)
-            predicted = model(text, offset)
+        for idx, (text, id) in enumerate(dataloader):
+            text = text.to(device)
+            predicted = model(text)
             predicted = F.softmax(predicted, dim=1)
             predictions.append(predicted)
             ids.append(id)
@@ -156,7 +162,7 @@ if __name__ == "__main__":
     train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True,
                               collate_fn=train_dataset.char_level_collate)
     valid_loader = DataLoader(valid_dataset, batch_size=len(valid_dataset), shuffle=False,
-                              collate_fn=valid_dataset.collate_function)
+                              collate_fn=valid_dataset.char_level_collate)
     test_loader = DataLoader(test_dataset, batch_size=len(test_dataset), shuffle=False,
                              collate_fn=test_dataset.char_level_collate)
 
@@ -171,9 +177,10 @@ if __name__ == "__main__":
     vocab_size = len(vocab)
     emsize = args.embsize
     init_range = args.init_range
-    model = LinearEmbeddingModel(vocab_size, num_class, num_layers=2, out_feats=[23, 102], dropouts=[0.50, 0.35],
-                                 embed_dim=args.embsize, init_range=args.init_range).to(device)
+    #model = LinearEmbeddingModel(vocab_size, num_class, num_layers=2, out_feats=[23, 102], dropouts=[0.50, 0.35],
+    #                             embed_dim=args.embsize, init_range=args.init_range).to(device)
 
+    model = entityEmbeddingModel(vocab_size, num_class).to(device)
     epochs = args.epoch
     lr = args.learning_rate
     batch_size = args.batch_size

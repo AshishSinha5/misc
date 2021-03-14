@@ -58,4 +58,4 @@ class AuthorDataset(Dataset):
         else:
             (text_list, id) = zip(*batch)
             padded_tensors = torch.nn.utils.rnn.pad_sequence([torch.tensor(l) for l in text_list], batch_first=True)
-            return text_list.to(device), list(id)
+            return text_list.to(device).long(), list(id)

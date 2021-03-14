@@ -1,4 +1,5 @@
 from torch import nn
+import torch
 
 
 class LinearEmbeddingModel(nn.Module):
@@ -40,16 +41,22 @@ class LinearEmbeddingModel(nn.Module):
 
 
 class entityEmbeddingModel(nn.Module):
-    def __init__(self, vocab_size, num_class, embed_dim=32, hidden_dim=16):
+    def __init__(self, vocab_size, num_class, embed_dim=32, hidden_dim=16, bidirectional=True):
         super(entityEmbeddingModel, self).__init__()
         self.embed_dim = embed_dim
+        self.bidirectional = bidirectional
         self.embedding = nn.Embedding(vocab_size, self.embed_dim)
-        self.lstm = nn.LSTM(embed_dim, hidden_dim, batch_first=True)
-        self.op = nn.Linear(hidden_dim, num_class)
+        self.lstm = nn.LSTM(embed_dim, hidden_dim, batch_first=True, bidirectional=self.bidirectional)
+        if self.bidirectional:
+            self.op = nn.Linear(2*hidden_dim, num_class)
+        else:
+            self.op = nn.Linear(hidden_dim, num_class)
 
     def forward(self, text):
         x = self.embedding(text)
         lstm_op, (ht, ct) = self.lstm(x)
+        if self.bidirectional:
+            ht = torch.unsqueeze(torch.cat([ht[i, :, :] for i in range(2)], dim=-1), dim=0)
         x = self.op(ht[-1])
         return x
 
