@@ -48,7 +48,7 @@ def loss_metric(actual, predicted, eps=1e-15):
     return -1.0 / rows * vsota
 
 
-def sent2vec(words):
+def sent2vec(words, normalized = True):
     words = word_tokenize(words)
     words = [w for w in words if w.isalpha()]
     M = []
@@ -58,10 +58,12 @@ def sent2vec(words):
         except:
             continue
     M = np.array(M)
-    v = M.sum(axis=0)
-    if type(v) != np.ndarray:
-        return np.zeros(300)
-    return v / np.sqrt((v ** 2).sum())
+    if normalized:
+        v = M.sum(axis=0)
+        if type(v) != np.ndarray:
+            return np.zeros(300)
+        return v / np.sqrt((v ** 2).sum())
+    return M
 
 
 def get_train_valid_data(train_file_path, test_file_path, valid_ratio):
@@ -114,48 +116,41 @@ def freq_count_features(X_train, X_valid, X_test):
     return X_train_ctv, X_valid_ctv, X_test_ctv
 
 
-def logistic_model(xtrain_tfv, xvalid_tfv, xtrain_ctv, xvalid_ctv, xtest_tfv, xtest_ctv, y_train, y_valid):
+def glove_feats(X_train, X_valid, X_test):
+    x_train_glv = np.array([sent2vec(x, normalized=False) for x in tqdm(X_train)])
+    x_valid_glv = np.array([sent2vec(x, normalized=False) for x in tqdm(X_valid)])
+    x_test_glv = np.array([sent2vec(x, normalized=False) for x in tqdm(X_test)])
+    return x_train_glv, x_valid_glv, x_test_glv
+
+
+def glove_feats_normalized(X_train, X_valid, X_test):
+    x_train_glv = np.array([sent2vec(x) for x in tqdm(X_train)])
+    x_valid_glv = np.array([sent2vec(x) for x in tqdm(X_valid)])
+    x_test_glv = np.array([sent2vec(x) for x in tqdm(X_test)])
+    return x_train_glv, x_valid_glv, x_test_glv
+
+
+def logistic_model(xtrain, xvalid, xtest, y_train, y_valid):
     clf = LogisticRegression(C=1, max_iter=1000)
-    # xtrain_tfv, xvalid_tfv = tfidf_features(X_train, X_valid)
-    clf.fit(xtrain_tfv, y_train)
-    predictions_tfidf = clf.predict_proba(xvalid_tfv)
-    tfv_pred = clf.predict_proba(xtest_tfv)
-    tfidf_loss = multiclass_logloss(predictions_tfidf, y_valid)
+    clf.fit(xtrain, y_train)
+    predictions= clf.predict_proba(xvalid)
+    pred = clf.predict_proba(xtest)
+    loss = multiclass_logloss(predictions, y_valid)
 
-    print("Logistic Model with TFIDF features : %0.3f " % tfidf_loss)
-
-    # xtrain_ctv, xvalid_ctv = freq_count_features(X_train, X_valid)
-    clf.fit(xtrain_ctv, y_train)
-    predictions_ctv = clf.predict_proba(xvalid_ctv)
-    ctv_loss = multiclass_logloss(predictions_ctv, y_valid)
-    ctv_pred = clf.predict_proba(xtest_ctv)
-
-    print("Logistic Model with Count Vectorizer features : %0.3f " % ctv_loss)
-
-    return tfv_pred, ctv_pred
+    return pred, loss
 
 
-def nb_model(xtrain_tfv, xvalid_tfv, xtrain_ctv, xvalid_ctv, xtest_tfv, xtest_ctv, y_train, y_valid):
+def nb_model(xtrain, xvalid, xtest,  y_train, y_valid):
     clf = MultinomialNB()
-    # xtrain_tfv, xvalid_tfv = tfidf_features(X_train, X_valid)
-    clf.fit(xtrain_tfv, y_train)
-    predictions_tfidf = clf.predict_proba(xvalid_tfv)
-    tfv_pred = clf.predict_proba(xtest_tfv)
-    tfidf_loss = multiclass_logloss(predictions_tfidf, y_valid)
+    clf.fit(xtrain, y_train)
+    predictions = clf.predict_proba(xvalid)
+    pred = clf.predict_proba(xtest)
+    loss = multiclass_logloss(predictions, y_valid)
 
-    print("Naive Bayes model with TFIDF features : %0.3f " % tfidf_loss)
-
-    # xtrain_ctv, xvalid_ctv = freq_count_features(X_train, X_valid)
-    clf.fit(xtrain_ctv, y_train)
-    predictions_ctv = clf.predict_proba(xvalid_ctv)
-    ctv_loss = multiclass_logloss(predictions_ctv, y_valid)
-    ctv_pred = clf.predict_proba(xtest_ctv)
-    print("Naive Bayes model with Count Vectorizer features : %0.3f " % ctv_loss)
-
-    return tfv_pred, ctv_pred
+    return pred, loss
 
 
-def nb_grid_search(xtrain_tfv, xvalid_tfv, xtrain_ctv, xvalid_ctv, xtest_tfv, xtest_ctv, y_train, y_valid):
+def nb_grid_search(xtrain, xvalid, xtest, y_train, y_valid):
     mll_scorer = metrics.make_scorer(loss_metric, greater_is_better=False, needs_proba=True)
     nb_model = MultinomialNB()
     clf = pipeline.Pipeline([('nb', nb_model)])
@@ -163,41 +158,24 @@ def nb_grid_search(xtrain_tfv, xvalid_tfv, xtrain_ctv, xvalid_ctv, xtest_tfv, xt
     model = GridSearchCV(estimator=clf, param_grid=param_grid, scoring=mll_scorer,
                          verbose=10, n_jobs=-1, iid=True, refit=True, cv=2)
 
-    model.fit(xtrain_tfv, y_train)
+    model.fit(xtrain, y_train)
     print("Best score: %0.3f" % model.best_score_)
-    print("Best parameters set:")
-    predictions_tfidf = model.predict_proba(xvalid_tfv)
-    tfv_pred = model.predict_proba(xtest_tfv)
-    tfidf_loss = multiclass_logloss(predictions_tfidf, y_valid)
+    predictions = model.predict_proba(xvalid)
+    pred = model.predict_proba(xtest)
+    loss = multiclass_logloss(predictions, y_valid)
 
-    print("Naive Bayes tuned model with TFIDF features : %0.3f " % tfidf_loss)
-
-    model.fit(xtrain_ctv, y_train)
-    print("Best score: %0.3f" % model.best_score_)
-    print("Best parameters set:")
-    predictions_ctv = model.predict_proba(xvalid_ctv)
-    ctv_pred = model.predict_proba(xtest_ctv)
-    ctv_loss = multiclass_logloss(predictions_ctv, y_valid)
-    print("Naive Bayes model tuned with Count Vectorizer features : %0.3f " % ctv_loss)
-
-    return tfv_pred, ctv_pred
+    return pred, loss
 
 
-def xgb_glove_model(x_train, x_valid, x_test, y_train, y_valid):
+def xgb_glove_model(xtrain, xvalid, xtest, y_train, y_valid):
     clf = xgb.XGBClassifier(max_depth=7, n_estimators=200, colsample_bytree=0.8,
                             subsample=0.8, nthread=10, learning_rate=0.1, silent=False)
 
-    xtrain_glove = np.array([sent2vec(x) for x in tqdm(x_train)])
-    xvalid_glove = np.array([sent2vec(x) for x in tqdm(x_valid)])
-    xtest_glove = np.array([sent2vec(x) for x in tqdm(x_test)])
-
-    clf.fit((xtrain_glove), y_train)
-    predictions = clf.predict_proba(xvalid_glove)
-    test_pred = clf.predict_proba(xtest_glove)
-    print("Xgboost glove model : %0.3f " % multiclass_logloss(predictions, y_valid))
-
-    return test_pred
-
+    clf.fit(xtrain, y_train)
+    predictions = clf.predict_proba(xvalid)
+    pred = clf.predict_proba(xtest)
+    loss = multiclass_logloss(predictions, y_valid)
+    return pred, loss
 
 def save_op(predictions, ids, model, feat):
     predictions = np.array(predictions)
@@ -229,22 +207,34 @@ if __name__ == "__main__":
     print('Getting Features')
     xtrain_tfv, xvalid_tfv, xtest_tfv = tfidf_features(X_train, X_valid, X_test)
     xtrain_ctv, xvalid_ctv, xtest_ctv = freq_count_features(X_train, X_valid, X_test)
+    xtrain_glv, xvalid_glv, xtest_glv = glove_feats(X_train, X_valid, X_test)
+    xtrain_glv_norm, xvalid_glv_norm, xtest_glv_norm = glove_feats_normalized(X_train, X_valid, X_test)
 
-    lr_tfv, lr_ctv = logistic_model(xtrain_tfv, xvalid_tfv, xtrain_ctv, xvalid_ctv, xtest_tfv, xtest_ctv, y_train,
-                                    y_valid)
+    lr_tfv, lr_tfv_loss = logistic_model(xtrain_tfv, xvalid_tfv, xtest_tfv, y_train, y_valid)
+    print('Logistic_regression with TFIDF : {}'.format(lr_tfv_loss))
     save_op(lr_tfv, ids, 'lr', 'tfv')
+
+    lr_ctv, lr_ctv_loss = logistic_model(xtrain_ctv, xvalid_ctv, xtest_ctv, y_train, y_valid)
+    print('Logistic_regression with Count Vectorizer : {}'.format(lr_ctv_loss))
     save_op(lr_ctv, ids, 'lr', 'ctv')
 
-    nb_tfv, nb_ctv = nb_model(xtrain_tfv, xvalid_tfv, xtrain_ctv, xvalid_ctv, xtest_tfv, xtest_ctv, y_train, y_valid)
+    nb_tfv, nb_tfv_loss = nb_model(xtrain_tfv, xvalid_tfv, xtest_tfv, y_train, y_valid)
+    print('NB with TFIDF : {}'.format(nb_tfv_loss))
     save_op(nb_tfv, ids, 'nb', 'tfv')
+
+    nb_ctv, nb_ctv_loss = nb_model(xtrain_ctv, xvalid_ctv, xtest_ctv, y_train, y_valid)
+    print('NB with Count Vectorizer : {}'.format(nb_ctv_loss))
     save_op(nb_ctv, ids, 'nb', 'ctv')
 
-    nb_tuned_tfv, nb_tuned_ctv = nb_grid_search(xtrain_tfv, xvalid_tfv, xtrain_ctv, xvalid_ctv, xtest_tfv, xtest_ctv,
-                                                y_train, y_valid)
+    nb_tuned_tfv, nb_tuned_tfv_loss = nb_grid_search(xtrain_tfv, xvalid_tfv, xtest_tfv, y_train, y_valid)
+    print('NB tuned with TFIDF : {}'.format(nb_tuned_tfv_loss))
+    save_op(nb_tuned_tfv, ids, 'nb_tuned', 'tfv')
 
-    save_op(nb_tuned_ctv, ids, 'nb_tuned', 'tfv')
-    save_op(nb_tuned_tfv, ids, 'nb_tuned', 'ctv')
+    nb_tuned_ctv, nb_tuned_tfv_loss = nb_grid_search(xtrain_ctv, xvalid_ctv, xtest_ctv, y_train, y_valid)
+    print('NB tuned with Count Vectorizer : {}'.format(nb_tuned_tfv_loss))
+    save_op(nb_tuned_ctv, ids, 'nb_tuned', 'ctv')
 
     # word embedding model
-    xgb_glv = xgb_glove_model(X_train, X_valid, X_test, y_train, y_valid)
+    xgb_glv, xgb_loss = xgb_glove_model(xtrain_glv_norm, xvalid_glv_norm, xtest_glv_norm, y_train, y_valid)
     save_op(xgb_glv, ids, 'xgb', 'glv')
+
