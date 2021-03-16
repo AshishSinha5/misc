@@ -61,3 +61,11 @@ class entityEmbeddingModel(nn.Module):
         return x
 
 
+class gloveEmbeddingModel(nn.Module):
+    def __init__(self):
+        super(gloveEmbeddingModel, self).__init__()
+        pass
+
+    def forward(self, x):
+        return x
+

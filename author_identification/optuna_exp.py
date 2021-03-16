@@ -1,8 +1,7 @@
-import time
 import torch
 import pickle
 from torch.utils.data import DataLoader
-import torch.nn.functional as F
+import time
 import optuna
 from optuna.trial import TrialState
 from optuna.integration import SkoptSampler
@@ -28,6 +27,9 @@ label_code = {
     'HPL': 1,
     'MWS': 2
 }
+
+start_time = time.strftime("%Y%m%d-%H%M%S")
+model_name = 'LinearEmbeddingModel'
 
 
 def objective(trial):
@@ -69,10 +71,11 @@ def objective(trial):
             total_acc = acc_val
         print('-' * 59)
         print('| end of epoch {:3d} | time: {:5.2f}s | '
-              'valid accuracy {:8.3f} | valid loss {:8.5f} '.format(epoch,
+              'valid accuracy {:8.3f} | valid loss {:8.5f}'.format(epoch,
                                                                     time.time() - epoch_start_time,
                                                                     acc_val, loss_val))
         print('-' * 59)
+
         trial.report(acc_val, epoch)
 
     return acc_val
@@ -128,7 +131,7 @@ if __name__ == "__main__":
                                          'acq_func_kwargs': {'xi': 0.02}})
 
     study = optuna.create_study(direction="maximize", pruner=SuccessiveHalvingPruner(), sampler=sampler)
-    study.optimize(objective2, n_trials=50)
+    study.optimize(objective, n_trials=2)
 
     pruned_trials = study.get_trials(deepcopy=False, states=[TrialState.PRUNED])
     complete_trials = study.get_trials(deepcopy=False, states=[TrialState.COMPLETE])
@@ -147,6 +150,12 @@ if __name__ == "__main__":
     for key, value in trial.params.items():
         print("    {}: {}".format(key, value))
 
-    with open('best_params.pickle', 'wb') as f:
+    with open('optuna_logs/params/best_params_{}_{}_{}.pickle'.format(model_name, start_time, trial.value), 'wb') as f:
         pickle.dump(trial.params, f, protocol=pickle.HIGHEST_PROTOCOL)
+
+    with open('optuna_logs/studies/study_{}_{}_{}.pickle'.format(model_name, start_time, trial.value), 'wb') as f:
+        pickle.dump(study, f, protocol=pickle.HIGHEST_PROTOCOL)
+
+
+
 

@@ -13,7 +13,9 @@ from torchtext.vocab import Vocab
 from nltk.stem import WordNetLemmatizer
 from nltk.corpus import stopwords
 from dataloader import AuthorDataset
+from tqdm import tqdm
 
+embedding_loc = 'data/glove.840B.300d.txt'
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 lemmatizer = WordNetLemmatizer()
 stop_words = set(stopwords.words("english"))
@@ -31,6 +33,36 @@ label_code = {
 }
 
 tokenizer = get_tokenizer('basic_english')
+
+
+def get_index():
+    f = open(embedding_loc, 'rb')
+    embeddings_index = {}
+    print('Building Embedding Index')
+    for line in tqdm(f, position=0, leave=True):
+        values = line.split()
+        word = values[0].decode('utf-8')
+        coefs = np.asarray(values[1:], dtype='float32')
+        embeddings_index[word] = coefs
+    return embeddings_index
+
+
+def multiclass_logloss(predicted, actual, eps=1e-15):
+    """Multi class version of Logarithmic Loss metric.
+    :param actual: Array containing the actual target classes
+    :param predicted: Matrix with class predictions, one probability per class
+    """
+    # Convert 'actual' to a binary array if it's not already:
+    if len(actual.shape) == 1:
+        actual2 = np.zeros((actual.shape[0], predicted.shape[1]))
+        for i, val in enumerate(actual):
+            actual2[i, val] = 1
+        actual = actual2
+
+    clip = np.clip(predicted, eps, 1 - eps)
+    rows = actual.shape[0]
+    vsota = np.sum(actual * np.log(clip))
+    return -1.0 / rows * vsota
 
 
 def preprocess(s):
@@ -82,9 +114,9 @@ def train(model, dataloader, optimizer, criterion, epoch):
     log_interval = 500
     start_time = time.time()
 
-    for idx, (label, text) in enumerate(dataloader):
-        label, text = label.to(device).long(), text.to(device).long()
-        predicted_label = model(text)
+    for idx, (label, text, offsets) in enumerate(dataloader):
+        label, text, offsets = label.to(device).long(), text.to(device).long(), offsets.to(device)
+        predicted_label = model(text, offsets)
         loss = criterion(predicted_label, label)
         loss.backward()
         torch.nn.utils.clip_grad_norm_(model.parameters(), 0.1)
@@ -104,13 +136,22 @@ def train(model, dataloader, optimizer, criterion, epoch):
 def evaluate(model, dataloader, criterion):
     model.eval()
     total_acc, total_loss, total_count = 0, 0, 0
+    predictions = []
+    labels = []
     with torch.no_grad():
-        for idx, (label, text) in enumerate(dataloader):
-            label, text= label.to(device), text.to(device)
-            predicted = model(text)
+        for idx, (label, text, offsets) in enumerate(dataloader):
+            label, text, offsets = label.to(device).long(), text.to(device).long(), offsets.to(device).long()
+            predicted = model(text, offsets)
             total_loss += criterion(predicted, label)
             total_acc += (predicted.argmax(1) == label).sum().item()
             total_count += label.size(0)
+            pmf = F.softmax(predicted, dim=1)
+            predictions.append(pmf)
+            labels.append(label)
+    print(pmf[0])
+    predictions = np.reshape([item for sublist in predictions for item in sublist.tolist()], (-1, 3))
+    labels = np.array([item for sublist in labels for item in sublist.tolist()])
+    # metric = multiclass_logloss(predictions, labels)
 
     return total_acc / total_count, total_loss
 
@@ -119,9 +160,9 @@ def test(model, dataloader):
     model.eval()
     predictions, ids = [], []
     with torch.no_grad():
-        for idx, (text, id) in enumerate(dataloader):
-            text = text.to(device)
-            predicted = model(text)
+        for idx, (text, offsets, id) in enumerate(dataloader):
+            text, offsets = text.to(device), offsets.to(device)
+            predicted = model(text, offsets)
             predicted = F.softmax(predicted, dim=1)
             predictions.append(predicted)
             ids.append(id)
@@ -166,7 +207,6 @@ if __name__ == "__main__":
     test_loader = DataLoader(test_dataset, batch_size=len(test_dataset), shuffle=False,
                              collate_fn=test_dataset.char_level_collate)
 
-
     for i, (label, text) in enumerate(train_loader):
         print(label)
         print(text.shape)
@@ -177,7 +217,7 @@ if __name__ == "__main__":
     vocab_size = len(vocab)
     emsize = args.embsize
     init_range = args.init_range
-    #model = LinearEmbeddingModel(vocab_size, num_class, num_layers=2, out_feats=[23, 102], dropouts=[0.50, 0.35],
+    # model = LinearEmbeddingModel(vocab_size, num_class, num_layers=2, out_feats=[23, 102], dropouts=[0.50, 0.35],
     #                             embed_dim=args.embsize, init_range=args.init_range).to(device)
 
     model = entityEmbeddingModel(vocab_size, num_class).to(device)
@@ -199,9 +239,9 @@ if __name__ == "__main__":
             total_acc = acc_val
         print('-' * 59)
         print('| end of epoch {:3d} | time: {:5.2f}s | '
-              'valid accuracy {:8.3f} | valid loss {:8.5f} '.format(epoch,
-                                                                    time.time() - epoch_start_time,
-                                                                    acc_val, loss_val))
+              'valid accuracy {:8.3f} | valid loss {:8.5f} n'.format(epoch,
+                                                                     time.time() - epoch_start_time,
+                                                                     acc_val, loss_val))
         print('-' * 59)
 
     test(model, test_loader)

@@ -1,3 +1,4 @@
+import numpy as np
 import torch
 from torch.utils.data import Dataset
 
@@ -6,7 +7,7 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 class AuthorDataset(Dataset):
 
-    def __init__(self, X, y, vocab, tokenizer, id=None, label_code=None, train=True):
+    def __init__(self, X, y, vocab, tokenizer, id=None, label_code=None, train=True, glove=None):
         self.X = X
         self.y = y
         self.ID = id
@@ -14,6 +15,7 @@ class AuthorDataset(Dataset):
         self.vocab = vocab
         self.tokenizer = tokenizer
         self.label_code = label_code
+        self.embeddings_index = glove
 
     def __len__(self):
         return len(self.X)
@@ -21,8 +23,24 @@ class AuthorDataset(Dataset):
     def text_pipeline(self, line):
         return [self.vocab[tokens] for tokens in self.tokenizer(line)]
 
+    def sen2vec(self, words):
+        M = []
+        for w in words:
+            try:
+                M.append(self.embeddings_index[w])
+            except:
+                continue
+        M = np.array(M)
+        v = M.sum(axis=0)
+        if type(v) != np.ndarray:
+            return np.zeros(300)
+        return v / np.sqrt((v ** 2).sum())
+
     def __getitem__(self, index):
-        x = torch.tensor(self.text_pipeline(self.X[index]))
+        if self.embeddings_index is not None:
+            x = torch.tensor(self.sen2vec(self.X[index]))
+        else:
+            x = torch.tensor(self.text_pipeline(self.X[index]))
         if self.train:
             y = self.label_code[self.y[index]]
             return x, y
