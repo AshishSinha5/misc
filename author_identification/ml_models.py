@@ -1,17 +1,19 @@
 import argparse
-import time
+from tqdm import tqdm
 import numpy as np
 import pandas as pd
 
-from sklearn import preprocessing, decomposition, model_selection, metrics, pipeline
+from sklearn import metrics, pipeline
 from sklearn.model_selection import GridSearchCV
 from sklearn.feature_extraction.text import TfidfVectorizer, CountVectorizer
-from sklearn.decomposition import TruncatedSVD
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import train_test_split
 from sklearn.naive_bayes import MultinomialNB
+import xgboost as xgb
 
-from main import preprocess, multiclass_logloss
+from nltk import word_tokenize
+
+from main import preprocess, multiclass_logloss, get_index
 
 author_code = {
     'EAP': 'Edgar Allan Poe',
@@ -24,6 +26,9 @@ label_code = {
     'HPL': 1,
     'MWS': 2
 }
+
+embeddings_index = get_index()
+
 
 def loss_metric(actual, predicted, eps=1e-15):
     """Multi class version of Logarithmic Loss metric.
@@ -41,6 +46,22 @@ def loss_metric(actual, predicted, eps=1e-15):
     rows = actual.shape[0]
     vsota = np.sum(actual * np.log(clip))
     return -1.0 / rows * vsota
+
+
+def sent2vec(words):
+    words = word_tokenize(words)
+    words = [w for w in words if w.isalpha()]
+    M = []
+    for w in words:
+        try:
+            M.append(embeddings_index[w])
+        except:
+            continue
+    M = np.array(M)
+    v = M.sum(axis=0)
+    if type(v) != np.ndarray:
+        return np.zeros(300)
+    return v / np.sqrt((v ** 2).sum())
 
 
 def get_train_valid_data(train_file_path, test_file_path, valid_ratio):
@@ -162,6 +183,22 @@ def nb_grid_search(xtrain_tfv, xvalid_tfv, xtrain_ctv, xvalid_ctv, xtest_tfv, xt
     return tfv_pred, ctv_pred
 
 
+def xgb_glove_model(x_train, x_valid, x_test, y_train, y_valid):
+    clf = xgb.XGBClassifier(max_depth=7, n_estimators=200, colsample_bytree=0.8,
+                            subsample=0.8, nthread=10, learning_rate=0.1, silent=False)
+
+    xtrain_glove = np.array([sent2vec(x) for x in tqdm(x_train)])
+    xvalid_glove = np.array([sent2vec(x) for x in tqdm(x_valid)])
+    xtest_glove = np.array([sent2vec(x) for x in tqdm(x_test)])
+
+    clf.fit((xtrain_glove), y_train)
+    predictions = clf.predict_proba(xvalid_glove)
+    test_pred = clf.predict_proba(xtest_glove)
+    print("Xgboost glove model : %0.3f " % multiclass_logloss(predictions, y_valid))
+
+    return test_pred
+
+
 def save_op(predictions, ids, model, feat):
     predictions = np.array(predictions)
     eap, hpl, mws = predictions[:, 0], predictions[:, 1], predictions[:, 2]
@@ -208,4 +245,6 @@ if __name__ == "__main__":
     save_op(nb_tuned_ctv, ids, 'nb_tuned', 'tfv')
     save_op(nb_tuned_tfv, ids, 'nb_tuned', 'ctv')
 
-
+    # word embedding model
+    xgb_glv = xgb_glove_model(X_train, X_valid, X_test, y_train, y_valid)
+    save_op(xgb_glv, ids, 'xgb', 'glv')
