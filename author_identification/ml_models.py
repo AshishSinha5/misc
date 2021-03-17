@@ -2,13 +2,15 @@ import argparse
 from tqdm import tqdm
 import numpy as np
 import pandas as pd
+import pickle
 
 from sklearn import metrics, pipeline
-from sklearn.model_selection import GridSearchCV
+from sklearn.model_selection import GridSearchCV, RandomizedSearchCV
 from sklearn.feature_extraction.text import TfidfVectorizer, CountVectorizer
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import train_test_split
 from sklearn.naive_bayes import MultinomialNB
+from sklearn.metrics import accuracy_score
 import xgboost as xgb
 
 from nltk import word_tokenize
@@ -27,7 +29,9 @@ label_code = {
     'MWS': 2
 }
 
-embeddings_index = get_index()
+print('Loading Embeddings')
+with open('data/embeddings.pkl', 'rb') as f:
+    embeddings_index = pickle.load(f)
 
 
 def loss_metric(actual, predicted, eps=1e-15):
@@ -48,7 +52,10 @@ def loss_metric(actual, predicted, eps=1e-15):
     return -1.0 / rows * vsota
 
 
-def sent2vec(words, normalized = True):
+mll_scorer = metrics.make_scorer(loss_metric, greater_is_better=False, needs_proba=True)
+
+
+def sent2vec(words, normalized=True):
     words = word_tokenize(words)
     words = [w for w in words if w.isalpha()]
     M = []
@@ -133,49 +140,73 @@ def glove_feats_normalized(X_train, X_valid, X_test):
 def logistic_model(xtrain, xvalid, xtest, y_train, y_valid):
     clf = LogisticRegression(C=1, max_iter=1000)
     clf.fit(xtrain, y_train)
-    predictions= clf.predict_proba(xvalid)
+    predictions = clf.predict_proba(xvalid)
     pred = clf.predict_proba(xtest)
     loss = multiclass_logloss(predictions, y_valid)
+    score = clf.score(xvalid, y_valid)
+    return pred, loss, score
 
-    return pred, loss
 
-
-def nb_model(xtrain, xvalid, xtest,  y_train, y_valid):
+def nb_model(xtrain, xvalid, xtest, y_train, y_valid):
     clf = MultinomialNB()
     clf.fit(xtrain, y_train)
     predictions = clf.predict_proba(xvalid)
     pred = clf.predict_proba(xtest)
     loss = multiclass_logloss(predictions, y_valid)
-
-    return pred, loss
+    score = clf.score(xvalid, y_valid)
+    return pred, loss, score
 
 
 def nb_grid_search(xtrain, xvalid, xtest, y_train, y_valid):
-    mll_scorer = metrics.make_scorer(loss_metric, greater_is_better=False, needs_proba=True)
     nb_model = MultinomialNB()
     clf = pipeline.Pipeline([('nb', nb_model)])
     param_grid = {'nb__alpha': [0.001, 0.01, 0.1, 1, 10, 100]}
     model = GridSearchCV(estimator=clf, param_grid=param_grid, scoring=mll_scorer,
-                         verbose=10, n_jobs=-1, iid=True, refit=True, cv=2)
+                         verbose=0, n_jobs=-1, refit=True, cv=2)
 
     model.fit(xtrain, y_train)
-    print("Best score: %0.3f" % model.best_score_)
     predictions = model.predict_proba(xvalid)
     pred = model.predict_proba(xtest)
     loss = multiclass_logloss(predictions, y_valid)
-
-    return pred, loss
+    score = accuracy_score(y_valid, model.predict(xvalid))
+    return pred, loss, score
 
 
 def xgb_glove_model(xtrain, xvalid, xtest, y_train, y_valid):
     clf = xgb.XGBClassifier(max_depth=7, n_estimators=200, colsample_bytree=0.8,
-                            subsample=0.8, nthread=10, learning_rate=0.1, silent=False)
+                            subsample=0.8, nthread=10, learning_rate=0.1, silent=False, verbosity=0)
 
     clf.fit(xtrain, y_train)
     predictions = clf.predict_proba(xvalid)
     pred = clf.predict_proba(xtest)
     loss = multiclass_logloss(predictions, y_valid)
-    return pred, loss
+    score = clf.score(xvalid, y_valid)
+    return pred, loss, score
+
+
+def xgb_grid_search(xtrain, xvalid, xtest, y_train, y_test):
+    clf = xgb.XGBClassifier(max_depth=7, n_estimators=200, colsample_bytree=0.8, subsample=0.8, nthread=10,
+                            learning_rate=0.1, silent=False, verbosity=0, use_label_encoder=False)
+
+    params = {
+        'min_child_weight': [1, 5, 10],
+        'gamma': [0.5, 1, 1.5, 2, 5],
+        'subsample': [0.6, 0.8, 1.0],
+        'n_estimators': [180, 190, 200],
+        'colsample_bytree': [0.6, 0.8, 1.0],
+        'max_depth': [3, 4, 5]
+    }
+
+    model = RandomizedSearchCV(clf, param_distributions=params, scoring=mll_scorer, n_jobs=-1,
+                               verbose=1, cv=2)
+
+    model.fit(xtrain, y_train)
+    predictions = model.predict_proba(xvalid)
+    pred = model.predict_proba(xtest)
+    loss = multiclass_logloss(predictions, y_valid)
+    score = accuracy_score(y_valid, model.predict(xvalid))
+    return pred, score, loss
+
 
 def save_op(predictions, ids, model, feat):
     predictions = np.array(predictions)
@@ -210,31 +241,43 @@ if __name__ == "__main__":
     xtrain_glv, xvalid_glv, xtest_glv = glove_feats(X_train, X_valid, X_test)
     xtrain_glv_norm, xvalid_glv_norm, xtest_glv_norm = glove_feats_normalized(X_train, X_valid, X_test)
 
-    lr_tfv, lr_tfv_loss = logistic_model(xtrain_tfv, xvalid_tfv, xtest_tfv, y_train, y_valid)
-    print('Logistic_regression with TFIDF : {}'.format(lr_tfv_loss))
+    lr_tfv, lr_tfv_loss, lr_tfv_score = logistic_model(xtrain_tfv, xvalid_tfv, xtest_tfv, y_train, y_valid)
+    print('Logistic_regression with TFIDF : {}\tacc {}'.format(lr_tfv_loss, lr_tfv_score))
     save_op(lr_tfv, ids, 'lr', 'tfv')
 
-    lr_ctv, lr_ctv_loss = logistic_model(xtrain_ctv, xvalid_ctv, xtest_ctv, y_train, y_valid)
-    print('Logistic_regression with Count Vectorizer : {}'.format(lr_ctv_loss))
+    lr_ctv, lr_ctv_loss, lr_ctv_score = logistic_model(xtrain_ctv, xvalid_ctv, xtest_ctv, y_train, y_valid)
+    print('Logistic_regression with Count Vectorizer : {}\tacc {}'.format(lr_ctv_loss, lr_ctv_score))
     save_op(lr_ctv, ids, 'lr', 'ctv')
 
-    nb_tfv, nb_tfv_loss = nb_model(xtrain_tfv, xvalid_tfv, xtest_tfv, y_train, y_valid)
-    print('NB with TFIDF : {}'.format(nb_tfv_loss))
+    nb_tfv, nb_tfv_loss, nb_tfv_score = nb_model(xtrain_tfv, xvalid_tfv, xtest_tfv, y_train, y_valid)
+    print('NB with TFIDF : {}\tacc {}'.format(nb_tfv_loss, nb_tfv_score))
     save_op(nb_tfv, ids, 'nb', 'tfv')
 
-    nb_ctv, nb_ctv_loss = nb_model(xtrain_ctv, xvalid_ctv, xtest_ctv, y_train, y_valid)
-    print('NB with Count Vectorizer : {}'.format(nb_ctv_loss))
+    nb_ctv, nb_ctv_loss, nb_ctv_score = nb_model(xtrain_ctv, xvalid_ctv, xtest_ctv, y_train, y_valid)
+    print('NB with Count Vectorizer : {}\t{}'.format(nb_ctv_loss, nb_ctv_score))
     save_op(nb_ctv, ids, 'nb', 'ctv')
 
-    nb_tuned_tfv, nb_tuned_tfv_loss = nb_grid_search(xtrain_tfv, xvalid_tfv, xtest_tfv, y_train, y_valid)
-    print('NB tuned with TFIDF : {}'.format(nb_tuned_tfv_loss))
+    nb_tuned_tfv, nb_tuned_tfv_loss, nb_tuned_tfv_score = nb_grid_search(xtrain_tfv, xvalid_tfv, xtest_tfv, y_train,
+                                                                         y_valid)
+    print('NB tuned with TFIDF : {}\tacc {}'.format(nb_tuned_tfv_loss, nb_tuned_tfv_score))
     save_op(nb_tuned_tfv, ids, 'nb_tuned', 'tfv')
 
-    nb_tuned_ctv, nb_tuned_tfv_loss = nb_grid_search(xtrain_ctv, xvalid_ctv, xtest_ctv, y_train, y_valid)
-    print('NB tuned with Count Vectorizer : {}'.format(nb_tuned_tfv_loss))
+    nb_tuned_ctv, nb_tuned_ctv_loss, nb_tuned_ctv_score = nb_grid_search(xtrain_ctv, xvalid_ctv, xtest_ctv, y_train,
+                                                                         y_valid)
+    print('NB tuned with Count Vectorizer : {}\tacc {}'.format(nb_tuned_tfv_loss, nb_tuned_ctv_score))
     save_op(nb_tuned_ctv, ids, 'nb_tuned', 'ctv')
 
     # word embedding model
-    xgb_glv, xgb_loss = xgb_glove_model(xtrain_glv_norm, xvalid_glv_norm, xtest_glv_norm, y_train, y_valid)
+    xgb_glv, xgb_loss, xgb_score = xgb_glove_model(xtrain_glv_norm, xvalid_glv_norm, xtest_glv_norm, y_train, y_valid)
+    print('XGBoost with Glove vectors : {}\tacc {}'.format(xgb_loss, xgb_score))
     save_op(xgb_glv, ids, 'xgb', 'glv')
+    
+    xgb_tuned_glv, xgb_tuned_loss, xgb_tuned_score = xgb_grid_search(xtrain_glv_norm, xvalid_glv_norm, xtest_glv_norm,
+                                                                     y_train, y_valid)
+    print('XGBoost tuned with Glove vectors : {}\tacc {}'.format(xgb_tuned_loss, xgb_tuned_score))
+    save_op(xgb_tuned_glv, ids, 'xgb_tuned', 'glv')
 
+    xgb_tuned_ctv, xgb_tuned_loss, xgb_tuned_score = xgb_grid_search(xtrain_ctv, xvalid_ctv, xtest_ctv,
+                                                                     y_train, y_valid)
+    print('XGBoost tuned with Glove vectors : {}\tacc {}'.format(xgb_tuned_loss, xgb_tuned_score))
+    save_op(xgb_tuned_ctv, ids, 'xgb_tuned', 'ctv')
