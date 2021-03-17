@@ -23,24 +23,31 @@ class AuthorDataset(Dataset):
     def text_pipeline(self, line):
         return [self.vocab[tokens] for tokens in self.tokenizer(line)]
 
-    def sen2vec(self, words):
+    def sen2vec(self, sent):
         M = []
+        words = [tokens for tokens in self.tokenizer(sent)]
         for w in words:
             try:
                 M.append(self.embeddings_index[w])
             except:
-                continue
-        M = np.array(M)
-        v = M.sum(axis=0)
+                M.append(self.embeddings_index['<unk>'])
+        if len(M) == 0:
+            M = np.expand_dims(self.embeddings_index['<unk>'], axis=0)
+        M = np.array([v / np.sqrt((v ** 2).sum()) for v in M])
+        """v = M.sum(axis=0)
         if type(v) != np.ndarray:
             return np.zeros(300)
-        return v / np.sqrt((v ** 2).sum())
+        return v / np.sqrt((v ** 2).sum())"""
+        return M
 
     def __getitem__(self, index):
         if self.embeddings_index is not None:
             x = torch.tensor(self.sen2vec(self.X[index]))
+            if x.shape[-1] != 300:
+                print(self.X[index])
         else:
             x = torch.tensor(self.text_pipeline(self.X[index]))
+        x = x.type(torch.FloatTensor)
         if self.train:
             y = self.label_code[self.y[index]]
             return x, y
@@ -76,4 +83,4 @@ class AuthorDataset(Dataset):
         else:
             (text_list, id) = zip(*batch)
             padded_tensors = torch.nn.utils.rnn.pad_sequence([torch.tensor(l) for l in text_list], batch_first=True)
-            return text_list.to(device).long(), list(id)
+            return padded_tensors.to(device), list(id)

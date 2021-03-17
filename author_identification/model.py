@@ -62,10 +62,35 @@ class entityEmbeddingModel(nn.Module):
 
 
 class gloveEmbeddingModel(nn.Module):
-    def __init__(self):
+    def __init__(self, embed_dim=300, num_class=3, hidden_dim=100, bidirectional=True):
         super(gloveEmbeddingModel, self).__init__()
-        pass
+        self.input_dim = embed_dim
+        self.bidirectional = bidirectional
+        self.lstm = nn.LSTM(self.input_dim, hidden_dim, batch_first=True, bidirectional=self.bidirectional, dropout=0.3)
+        if self.bidirectional:
+            self.fc1 = nn.Linear(hidden_dim*2, 256)
+        else:
+            self.fc1 = nn.Linear(hidden_dim, 256)
+        self.bn1 = nn.BatchNorm1d(256)
+        self.dropout1 = nn.Dropout(0.6)
+        self.fc2 = nn.Linear(256, 256)
+        self.bn2 = nn.BatchNorm1d(256)
+        self.dropout2 = nn.Dropout(0.6)
+        self.op = nn.Linear(256, num_class)
 
-    def forward(self, x):
+    def forward(self, text):
+        # text = torch.unsqueeze(text, -1)
+        lstm_op, (ht, ct) = self.lstm(text)
+        if self.bidirectional:
+            ht = torch.unsqueeze(torch.cat([ht[i, :, :] for i in range(2)], dim=-1), dim=0)
+        x = self.fc1(ht[-1])
+        x = self.dropout1(x)
+        x = self.bn1(x)
+        x = self.fc2(x)
+        x = self.dropout2(x)
+        x = self.op(x)
         return x
+
+
+
 

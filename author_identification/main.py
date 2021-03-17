@@ -2,10 +2,11 @@ import argparse
 import time
 import torch
 import pandas as pd
+import pickle
 import numpy as np
 from torch.utils.data import DataLoader
 import torch.nn.functional as F
-from model import LinearEmbeddingModel, entityEmbeddingModel
+from model import LinearEmbeddingModel, entityEmbeddingModel, gloveEmbeddingModel
 from sklearn.model_selection import train_test_split
 from torchtext.data.utils import get_tokenizer
 from collections import Counter
@@ -14,6 +15,7 @@ from nltk.stem import WordNetLemmatizer
 from nltk.corpus import stopwords
 from dataloader import AuthorDataset
 from tqdm import tqdm
+import unidecode
 
 embedding_loc = 'data/glove.840B.300d.txt'
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -33,18 +35,14 @@ label_code = {
 }
 
 tokenizer = get_tokenizer('basic_english')
+with open('data/embeddings.pkl', 'rb') as f:
+    embeddings_index = pickle.load(f)
 
 
-def get_index():
-    f = open(embedding_loc, 'rb')
-    embeddings_index = {}
-    print('Building Embedding Index')
-    for line in tqdm(f, position=0, leave=True):
-        values = line.split()
-        word = values[0].decode('utf-8')
-        coefs = np.asarray(values[1:], dtype='float32')
-        embeddings_index[word] = coefs
-    return embeddings_index
+def update_embeddings(vocab):
+    for token in vocab.itos:
+        if token not in embeddings_index:
+            embeddings_index[token] = np.random.normal(scale=0.6, size=(300,), )
 
 
 def multiclass_logloss(predicted, actual, eps=1e-15):
@@ -66,9 +64,10 @@ def multiclass_logloss(predicted, actual, eps=1e-15):
 
 
 def preprocess(s):
-    x = ''.join(e for e in s.lower() if (e.isalnum() or e.isspace()))
-    x = ' '.join(lemmatizer.lemmatize(token) for token in x.split(" "))
-    x = ' '.join(lemmatizer.lemmatize(token, "v") for token in x.split(" "))
+    x = unidecode.unidecode(s)
+    x = ''.join(e for e in x.lower() if (e.isalnum() or e.isspace()))
+    # x = ' '.join(lemmatizer.lemmatize(token) for token in x.split(" "))
+    # x = ' '.join(lemmatizer.lemmatize(token, "v") for token in x.split(" "))
     x = ' '.join(word for word in x.split(" ") if not word in stop_words)
     return x
 
@@ -92,9 +91,20 @@ def get_dataset(train_file_path, test_file_path, valid_ratio):
     y = train_df['author']
     X_test = test_df['text']
     X_train, X_valid, y_train, y_valid, vocab = get_tokenized_data(valid_ratio, X, y, X_test)
-
-    train_dataset = AuthorDataset(X_train, y_train, vocab, tokenizer, None, label_code, train=True)
-    valid_dataset = AuthorDataset(X_valid, y_valid, vocab, tokenizer, None, label_code, train=True)
+    train_null_idx = [i for i, x in enumerate(X_train) if (x == "") or (x == " ")]
+    valid_null_idx = [i for i, x in enumerate(X_valid) if (x == "") or (x == " ")]
+    print(train_null_idx)
+    for idx in train_null_idx:
+        del X_train[idx]
+        del y_train[idx]
+    for idx in valid_null_idx:
+        del X_valid[idx]
+        del y_valid[idx]
+    update_embeddings(vocab)
+    train_dataset = AuthorDataset(X_train, y_train, vocab, tokenizer, None, label_code, train=True,
+                                  glove=embeddings_index)
+    valid_dataset = AuthorDataset(X_valid, y_valid, vocab, tokenizer, None, label_code, train=True,
+                                  glove=embeddings_index)
 
     return train_dataset, valid_dataset, vocab
 
@@ -104,7 +114,7 @@ def get_test_dataset(test_file_path, vocab):
     X_test = test_df['text']
     X_test = list(map(lambda x: preprocess(x), X_test))
     id = test_df['id']
-    test_dataset = AuthorDataset(X_test, None, vocab, tokenizer, id, label_code, train=False)
+    test_dataset = AuthorDataset(X_test, None, vocab, tokenizer, id, label_code, train=False, glove=embeddings_index)
     return test_dataset
 
 
@@ -114,9 +124,9 @@ def train(model, dataloader, optimizer, criterion, epoch):
     log_interval = 500
     start_time = time.time()
 
-    for idx, (label, text, offsets) in enumerate(dataloader):
-        label, text, offsets = label.to(device).long(), text.to(device).long(), offsets.to(device)
-        predicted_label = model(text, offsets)
+    for idx, (label, text) in enumerate(dataloader):
+        label, text = label.to(device), text.to(device)
+        predicted_label = model(text)
         loss = criterion(predicted_label, label)
         loss.backward()
         torch.nn.utils.clip_grad_norm_(model.parameters(), 0.1)
@@ -139,9 +149,9 @@ def evaluate(model, dataloader, criterion):
     predictions = []
     labels = []
     with torch.no_grad():
-        for idx, (label, text, offsets) in enumerate(dataloader):
-            label, text, offsets = label.to(device).long(), text.to(device).long(), offsets.to(device).long()
-            predicted = model(text, offsets)
+        for idx, (label, text) in enumerate(dataloader):
+            label, text = label.to(device), text.to(device)
+            predicted = model(text)
             total_loss += criterion(predicted, label)
             total_acc += (predicted.argmax(1) == label).sum().item()
             total_count += label.size(0)
@@ -160,9 +170,9 @@ def test(model, dataloader):
     model.eval()
     predictions, ids = [], []
     with torch.no_grad():
-        for idx, (text, offsets, id) in enumerate(dataloader):
-            text, offsets = text.to(device), offsets.to(device)
-            predicted = model(text, offsets)
+        for idx, (text, id) in enumerate(dataloader):
+            text = text.to(device)
+            predicted = model(text)
             predicted = F.softmax(predicted, dim=1)
             predictions.append(predicted)
             ids.append(id)
@@ -187,7 +197,7 @@ if __name__ == "__main__":
     parser.add_argument('--valid_ratio', type=float, default=0.1, help='proportion of validation samples')
     parser.add_argument('--embsize', type=int, default=37, help='embedding size')
     parser.add_argument('--epoch', type=int, default=20)
-    parser.add_argument('--batch_size', type=int, default=18)
+    parser.add_argument('--batch_size', type=int, default=32)
     parser.add_argument('--learning_rate', type=float, default=0.005489520509131124)
     parser.add_argument('--init_range', type=float, default=0.34261292447576064, help='range for weight initialization')
 
@@ -201,7 +211,7 @@ if __name__ == "__main__":
     test_dataset = get_test_dataset(test_file_path, vocab)
 
     train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True,
-                              collate_fn=train_dataset.char_level_collate)
+                              collate_fn=train_dataset.char_level_collate, drop_last=True)
     valid_loader = DataLoader(valid_dataset, batch_size=len(valid_dataset), shuffle=False,
                               collate_fn=valid_dataset.char_level_collate)
     test_loader = DataLoader(test_dataset, batch_size=len(test_dataset), shuffle=False,
@@ -220,13 +230,14 @@ if __name__ == "__main__":
     # model = LinearEmbeddingModel(vocab_size, num_class, num_layers=2, out_feats=[23, 102], dropouts=[0.50, 0.35],
     #                             embed_dim=args.embsize, init_range=args.init_range).to(device)
 
-    model = entityEmbeddingModel(vocab_size, num_class).to(device)
+    # model = entityEmbeddingModel(vocab_size, num_class).to(device)
+    model = gloveEmbeddingModel().to(device)
     epochs = args.epoch
     lr = args.learning_rate
     batch_size = args.batch_size
     total_acc = None
     criterion = torch.nn.CrossEntropyLoss()
-    optimizer = torch.optim.RMSprop(model.parameters(), lr=lr)
+    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, 1, gamma=0.1)
 
     for epoch in range(1, epochs + 1):
@@ -239,9 +250,9 @@ if __name__ == "__main__":
             total_acc = acc_val
         print('-' * 59)
         print('| end of epoch {:3d} | time: {:5.2f}s | '
-              'valid accuracy {:8.3f} | valid loss {:8.5f} n'.format(epoch,
-                                                                     time.time() - epoch_start_time,
-                                                                     acc_val, loss_val))
+              'valid accuracy {:8.3f} | valid loss {:8.5f}'.format(epoch,
+                                                                   time.time() - epoch_start_time,
+                                                                   acc_val, loss_val))
         print('-' * 59)
 
     test(model, test_loader)
