@@ -141,6 +141,7 @@ def train(model, dataloader, optimizer, criterion, epoch):
                                               total_acc / total_count))
             total_acc, total_count = 0, 0
             start_time = time.time()
+    del text
 
 
 def evaluate(model, dataloader, criterion):
@@ -162,7 +163,7 @@ def evaluate(model, dataloader, criterion):
     predictions = np.reshape([item for sublist in predictions for item in sublist.tolist()], (-1, 3))
     labels = np.array([item for sublist in labels for item in sublist.tolist()])
     # metric = multiclass_logloss(predictions, labels)
-
+    del text
     return total_acc / total_count, total_loss
 
 

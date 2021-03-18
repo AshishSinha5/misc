@@ -76,11 +76,11 @@ class AuthorDataset(Dataset):
     def char_level_collate(self, batch):
         if self.train:
             (text_list, label_list) = zip(*batch)
-            padded_tensors = torch.nn.utils.rnn.pad_sequence([torch.tensor(l) for l in text_list], batch_first=True)
+            padded_tensors = torch.nn.utils.rnn.pad_sequence([l.detach().clone() for l in text_list], batch_first=True)
             label_list = torch.tensor(label_list)
             return label_list.to(device), padded_tensors.to(device)
 
         else:
             (text_list, id) = zip(*batch)
-            padded_tensors = torch.nn.utils.rnn.pad_sequence([torch.tensor(l) for l in text_list], batch_first=True)
+            padded_tensors = torch.nn.utils.rnn.pad_sequence([l.detach().clone() for l in text_list], batch_first=True)
             return padded_tensors.to(device), list(id)

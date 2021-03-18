@@ -6,7 +6,7 @@ import optuna
 from optuna.trial import TrialState
 from optuna.integration import SkoptSampler
 from optuna.pruners import SuccessiveHalvingPruner
-from model import LinearEmbeddingModel, entityEmbeddingModel
+from model import LinearEmbeddingModel, entityEmbeddingModel, gloveEmbeddingModel
 from main import get_dataset, train, evaluate, test
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -14,7 +14,8 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 train_file_path = 'data/train.csv'
 test_file_path = 'data/test.csv'
 num_class = 3
-epochs = 10
+epochs = 20
+n_trials = 50
 valid_ratio = 0.1
 author_code = {
     'EAP': 'Edgar Allan Poe',
@@ -29,10 +30,11 @@ label_code = {
 }
 
 start_time = time.strftime("%Y%m%d-%H%M%S")
-model_name = 'LinearEmbeddingModel'
-
+model_name = 'gloveEmbbeddingModel'
+train_dataset, valid_dataset, vocab = get_dataset(train_file_path, test_file_path, valid_ratio)
 
 def objective(trial):
+    torch.cuda.empty_cache()
     train_dataset, valid_dataset, vocab = get_dataset(train_file_path, test_file_path, valid_ratio)
 
     batch_size = trial.suggest_int('batch_size', 4, 64)
@@ -72,8 +74,8 @@ def objective(trial):
         print('-' * 59)
         print('| end of epoch {:3d} | time: {:5.2f}s | '
               'valid accuracy {:8.3f} | valid loss {:8.5f}'.format(epoch,
-                                                                    time.time() - epoch_start_time,
-                                                                    acc_val, loss_val))
+                                                                   time.time() - epoch_start_time,
+                                                                   acc_val, loss_val))
         print('-' * 59)
 
         trial.report(acc_val, epoch)
@@ -82,6 +84,8 @@ def objective(trial):
 
 
 def objective2(trial):
+    torch.cuda.empty_cache()
+    torch.empty()
     train_dataset, valid_dataset, vocab = get_dataset(train_file_path, test_file_path, valid_ratio)
 
     batch_size = trial.suggest_int('batch_size', 4, 64)
@@ -123,6 +127,54 @@ def objective2(trial):
     return acc_val
 
 
+def objective3(trial):
+    torch.cuda.empty_cache()
+
+    batch_size = trial.suggest_int('batch_size', 4, 64)
+    optimizer_name = trial.suggest_categorical("optimizer", ["Adam", "RMSprop", "SGD"])
+    lr = trial.suggest_float("lr", 1e-5, 5, log=True)
+
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True,
+                              collate_fn=train_dataset.char_level_collate, drop_last=True)
+    valid_loader = DataLoader(valid_dataset, batch_size=len(valid_dataset), shuffle=False,
+                              collate_fn=valid_dataset.char_level_collate, drop_last=True)
+
+    hidden_dim = trial.suggest_int('hidden_dim', 32, 100)
+    out_feat1 = trial.suggest_int('out_feat1', 64, 256)
+    num_layers = trial.suggest_int('num_layers', 0, 3)
+    out_feats = []
+    dropouts = []
+    for i in range(3):
+        out_feats.append(trial.suggest_int('units_l{}'.format(i), 64, 128))
+        dropouts.append(trial.suggest_float('drop_l{}'.format(i), 0.1, 0.6))
+
+    model = gloveEmbeddingModel(num_class=3, out_feat1=out_feat1, num_layers=num_layers, out_feats=out_feats[:num_layers],
+                                dropouts=dropouts[:num_layers], hidden_dim=hidden_dim).to(device)
+
+    criterion = torch.nn.CrossEntropyLoss()
+    optimizer = getattr(torch.optim, optimizer_name)(model.parameters(), lr=lr)
+    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, 1, gamma=0.1)
+    total_acc = None
+    acc_val = 0
+    for epoch in range(1, epochs + 1):
+        epoch_start_time = time.time()
+        train(model, train_loader, optimizer, criterion, epoch)
+        acc_val, loss_val = evaluate(model, valid_loader, criterion)
+        if total_acc is not None and total_acc > acc_val:
+            scheduler.step()
+        else:
+            total_acc = acc_val
+        print('-' * 59)
+        print('| end of epoch {:3d} | time: {:5.2f}s | '
+              'valid accuracy {:8.3f} | valid loss {:8.5f} '.format(epoch,
+                                                                    time.time() - epoch_start_time,
+                                                                    acc_val, loss_val))
+        print('-' * 59)
+        trial.report(acc_val, epoch)
+
+    return acc_val
+
+
 if __name__ == "__main__":
     sampler = SkoptSampler(skopt_kwargs={'base_estimator': 'RF',
                                          'n_random_starts': 10,
@@ -131,7 +183,7 @@ if __name__ == "__main__":
                                          'acq_func_kwargs': {'xi': 0.02}})
 
     study = optuna.create_study(direction="maximize", pruner=SuccessiveHalvingPruner(), sampler=sampler)
-    study.optimize(objective, n_trials=2)
+    study.optimize(objective3, n_trials=n_trials)
 
     pruned_trials = study.get_trials(deepcopy=False, states=[TrialState.PRUNED])
     complete_trials = study.get_trials(deepcopy=False, states=[TrialState.COMPLETE])
@@ -155,7 +207,3 @@ if __name__ == "__main__":
 
     with open('optuna_logs/studies/study_{}_{}_{}.pickle'.format(model_name, start_time, trial.value), 'wb') as f:
         pickle.dump(study, f, protocol=pickle.HIGHEST_PROTOCOL)
-
-
-
-
