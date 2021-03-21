@@ -36,6 +36,25 @@ Average length of tokens | ![](https://github.com/AshishSinha5/misc/blob/master/
 
 Looking at the graphs we notice that there appear to be some outliers and there seems to be specific patterns of how a particular author constructs their sentences, so these features might help build our classification model.
 
+## Evaluation Metrics
+
+1 - **Cross-Entropy Loss** <br>
+2 - **Accuracy**
+
+## Preprocessing
+
+## ML Models
+
+We now turn towards actual task of classification, for which we first explore the basic ML Models such as Naive Bayes, Logistic Regression followed by XGBoost Model. We consider TF-IDF and count vectors as our features.
+
+Model | Validation Loss | Validation Accuracy 
+:-----------------------:|:--------------------:|:-------------------:
+Logistic Regression with TFIDF vectors | 0.5374 |  0.829
+Logistic_regression with Count Vectorizer | 0.482 | 0.805
+Naive Bayes with TFIDF vectors | 0.555 | 0.829
+Naive Bayes with Count Vectorizer | 0.436 | 0.847
+
+We see that Naive Bayes Model with count vectorizer performs the best, we can further improve this model by hypreparameter tuning by grid search 
 
 
 
