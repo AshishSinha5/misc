@@ -54,7 +54,15 @@ Logistic_regression with Count Vectorizer | 0.482 | 0.805
 Naive Bayes with TFIDF vectors | 0.555 | 0.829
 Naive Bayes with Count Vectorizer | 0.436 | 0.847
 
-We see that Naive Bayes Model with count vectorizer performs the best, we can further improve this model by hypreparameter tuning by grid search 
+We see that Naive Bayes Model with count vectorizer performs the best, we can further improve this model by hypreparameter tuning by grid search, hyperparameter under consieration is the smoothing parameter for the n-gram model.
+
+
+Model | Validation Loss | Validation Accuracy 
+:-----------------------:|:--------------------:|:-------------------:
+Naive Bayes Tuned with Count Vectorizer | 0.4450 |  0.847
+Naive Bayes Tuned with TFIDF | 0.4421 | 0.840
+
+We improved aur results when using TF-IDF features but Coun vectorizer still performs better
 
 
 
