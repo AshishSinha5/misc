@@ -43,6 +43,11 @@ Looking at the graphs we notice that there appear to be some outliers and there 
 
 ## Preprocessing
 
+1 - Remove accented charecters <br>
+2 - Convert to lower cse <br>
+3 - Remove all the punctuations <br>
+4 - Remove all stop-words
+
 ## ML Models
 
 We now turn towards actual task of classification, for which we first explore the basic ML Models such as Naive Bayes, Logistic Regression followed by XGBoost Model. We consider TF-IDF and count vectors as our features.
@@ -64,23 +69,8 @@ Naive Bayes Tuned with TFIDF | 0.4421 | 0.840
 
 We improved aur results when using TF-IDF features but Coun vectorizer still performs better
 
+## DL Models
 
-
-
-
-## Workflow/Experiments
-
-- ML models
-  - Logistic (with tfidf, cntvec, glove)
-  - NB (with tfidf and cntvec)
-  - XGboost (with glove, tfidf, cntvec)
-  - Tuening
-- DL models
-  - Embedding Bag model
-  - Entity Embedding mode;
-  - Glove embedding model
-    - normalized 
-    - un-normalized 
-  - Tuning with optuna
-- Pretrained Model
-  - Tranformers
+### EmbeddingBagModel
+### EntityEmbeddingModel
+### GLoveEmbeddingModel
