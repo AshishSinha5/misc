@@ -70,7 +70,11 @@ Naive Bayes Tuned with TFIDF | 0.4421 | 0.840
 We improved aur results when using TF-IDF features but Coun vectorizer still performs better
 
 ## DL Models
+We now move towards Deep Learning Modelsk where we'll use PyTorch to build these models. The broad pipeline of how we'll go about building and improving these models is shown below.
 
 ### EmbeddingBagModel
+Embedding Bag model takes in the entire sentences as input and creates an embedding for the sentence as a whole, using torch.nn.EmbeddingBag
 ### EntityEmbeddingModel
+Entity Embedding Model builds o the previous model, as it creats an embedding for each of the tokens in the sentence which is then fed into LSTM layer follwed by fully connectted layers. 
 ### GLoveEmbeddingModel
+Similar to previous model but this uses pretrained glove embeddings for the tokens rather than training the embeddings on the go.
