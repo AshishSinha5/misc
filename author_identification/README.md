@@ -72,6 +72,8 @@ We improved aur results when using TF-IDF features but Coun vectorizer still per
 ## DL Models
 We now move towards Deep Learning Modelsk where we'll use PyTorch to build these models. The broad pipeline of how we'll go about building and improving these models is shown below.
 
+![model pipeline](https://github.com/AshishSinha5/misc/blob/master/author_identification/images/model_pipeline.png)
+
 ### EmbeddingBagModel
 Embedding Bag model takes in the entire sentences as input and creates an embedding for the sentence as a whole, using torch.nn.EmbeddingBag
 ### EntityEmbeddingModel
