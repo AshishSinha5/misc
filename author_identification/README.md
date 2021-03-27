@@ -76,6 +76,28 @@ We now move towards Deep Learning Modelsk where we'll use PyTorch to build these
 
 ### EmbeddingBagModel
 Embedding Bag model takes in the entire sentences as input and creates an embedding for the sentence as a whole, using torch.nn.EmbeddingBag
+
+![EmbeddingBag Model](https://github.com/AshishSinha5/misc/blob/master/author_identification/images/EmbeddingBagModel.png)
+
+After tuning the hyper-parameters of this model using Optuna, we get the final values as
+
+>'batch_size': 64 <br>
+>'optimizer': 'RMSprop' <br>
+>'lr': 0.036208458598920405 <br>
+>'init_range': 0.46816558695052723 <br>
+>'num_layers': 1 <br>
+>'units_l0': 82 <br>
+>'drop_l0': 0.4293082762379179 <br>
+>'embed_dim': 59  <br>
+
+The Final Validation Accuaracy and Loss Plots are as follows
+
+Model | Validation Loss | Validation Accuracy 
+:-----------------------:|:--------------------:|:-------------------:
+EmbeddingBagModel | ![loss](https://github.com/AshishSinha5/misc/blob/master/author_identification/plots/EmbeddingBagloss.png) |  ![acc](https://github.com/AshishSinha5/misc/blob/master/author_identification/plots/EmbeddingBagacc.png)
+
+We'll see if we can improve it by adding meta features.
+
 ### EntityEmbeddingModel
 Entity Embedding Model builds o the previous model, as it creats an embedding for each of the tokens in the sentence which is then fed into LSTM layer follwed by fully connectted layers. 
 ### GLoveEmbeddingModel
