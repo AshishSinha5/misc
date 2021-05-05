@@ -99,6 +99,9 @@ EmbeddingBagModel | ![loss](https://github.com/AshishSinha5/misc/blob/master/aut
 We'll see if we can improve it by adding meta features.
 
 ### EntityEmbeddingModel
-Entity Embedding Model builds o the previous model, as it creats an embedding for each of the tokens in the sentence which is then fed into LSTM layer follwed by fully connectted layers. 
+Entity Embedding Model builds over the previous model, as it creats an embedding for each of the tokens in the sentence which is then fed into LSTM layer follwed by fully connectted layers. 
+
+![Entity Embedding Model](https://github.com/AshishSinha5/misc/blob/master/author_identification/images/entityEmbedingModel.png)
+
 ### GLoveEmbeddingModel
 Similar to previous model but this uses pretrained glove embeddings for the tokens rather than training the embeddings on the go.
