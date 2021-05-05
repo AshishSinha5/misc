@@ -30,13 +30,12 @@ label_code = {
 }
 
 start_time = time.strftime("%Y%m%d-%H%M%S")
-model_name = 'gloveEmbbeddingModel'
+model_name = 'EntityEmbbeddingModel'
 train_dataset, valid_dataset, vocab = get_dataset(train_file_path, test_file_path, valid_ratio)
 
 def objective(trial):
     torch.cuda.empty_cache()
-    train_dataset, valid_dataset, vocab = get_dataset(train_file_path, test_file_path, valid_ratio)
-
+    # train_dataset, valid_dataset, vocab = get_dataset(train_file_path, test_file_path, valid_ratio)
     batch_size = trial.suggest_int('batch_size', 4, 64)
     optimizer_name = trial.suggest_categorical("optimizer", ["Adam", "RMSprop", "SGD"])
     lr = trial.suggest_float("lr", 1e-5, 1, log=True)
@@ -44,12 +43,11 @@ def objective(trial):
     num_layers = trial.suggest_int('num_layers', 0, 3)
     out_feats = []
     dropouts = []
-    for i in range(num_layers):
+    for i in range(3):
         out_feats.append(trial.suggest_int('units_l{}'.format(i), 4, 128))
         dropouts.append(trial.suggest_float('drop_l{}'.format(i), 0.1, 0.75))
     embed_dim = trial.suggest_int('embed_dim', 16, 64)
     vocab_size = len(vocab)
-
     model = LinearEmbeddingModel(vocab_size, num_class, num_layers, out_feats, dropouts, embed_dim, init_range).to(
         device)
     criterion = torch.nn.CrossEntropyLoss()
@@ -85,9 +83,7 @@ def objective(trial):
 
 def objective2(trial):
     torch.cuda.empty_cache()
-    torch.empty()
-    train_dataset, valid_dataset, vocab = get_dataset(train_file_path, test_file_path, valid_ratio)
-
+    # train_dataset, valid_dataset, vocab = get_dataset(train_file_path, test_file_path, valid_ratio)
     batch_size = trial.suggest_int('batch_size', 4, 64)
     optimizer_name = trial.suggest_categorical("optimizer", ["Adam", "RMSprop", "SGD"])
     lr = trial.suggest_float("lr", 1e-5, 5, log=True)
@@ -105,7 +101,6 @@ def objective2(trial):
                               collate_fn=train_dataset.char_level_collate, drop_last=True)
     valid_loader = DataLoader(valid_dataset, batch_size=len(valid_dataset), shuffle=False,
                               collate_fn=valid_dataset.char_level_collate, drop_last=True)
-
     total_acc = None
     acc_val = 0
     for epoch in range(1, epochs + 1):
@@ -183,7 +178,7 @@ if __name__ == "__main__":
                                          'acq_func_kwargs': {'xi': 0.02}})
 
     study = optuna.create_study(direction="maximize", pruner=SuccessiveHalvingPruner(), sampler=sampler)
-    study.optimize(objective3, n_trials=n_trials)
+    study.optimize(objective2, n_trials=n_trials)
 
     pruned_trials = study.get_trials(deepcopy=False, states=[TrialState.PRUNED])
     complete_trials = study.get_trials(deepcopy=False, states=[TrialState.COMPLETE])

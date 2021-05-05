@@ -43,11 +43,9 @@ class AuthorDataset(Dataset):
     def __getitem__(self, index):
         if self.embeddings_index is not None:
             x = torch.tensor(self.sen2vec(self.X[index]))
-            if x.shape[-1] != 300:
-                print(self.X[index])
+            x = x.type(torch.FloatTensor)
         else:
             x = torch.tensor(self.text_pipeline(self.X[index]))
-        x = x.type(torch.FloatTensor)
         if self.train:
             y = self.label_code[self.y[index]]
             return x, y

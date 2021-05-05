@@ -15,7 +15,7 @@ import xgboost as xgb
 
 from nltk import word_tokenize
 
-from main import preprocess, multiclass_logloss, get_index
+from main import preprocess, multiclass_logloss
 
 author_code = {
     'EAP': 'Edgar Allan Poe',
@@ -264,10 +264,10 @@ if __name__ == "__main__":
 
     nb_tuned_ctv, nb_tuned_ctv_loss, nb_tuned_ctv_score = nb_grid_search(xtrain_ctv, xvalid_ctv, xtest_ctv, y_train,
                                                                          y_valid)
-    print('NB tuned with Count Vectorizer : {}\tacc {}'.format(nb_tuned_tfv_loss, nb_tuned_ctv_score))
+    print('NB tuned with Count Vectorizer : {}\tacc {}'.format(nb_tuned_ctv_loss, nb_tuned_ctv_score))
     save_op(nb_tuned_ctv, ids, 'nb_tuned', 'ctv')
 
-    # word embedding model
+    """# word embedding model
     xgb_glv, xgb_loss, xgb_score = xgb_glove_model(xtrain_glv_norm, xvalid_glv_norm, xtest_glv_norm, y_train, y_valid)
     print('XGBoost with Glove vectors : {}\tacc {}'.format(xgb_loss, xgb_score))
     save_op(xgb_glv, ids, 'xgb', 'glv')
@@ -280,4 +280,4 @@ if __name__ == "__main__":
     xgb_tuned_ctv, xgb_tuned_loss, xgb_tuned_score = xgb_grid_search(xtrain_ctv, xvalid_ctv, xtest_ctv,
                                                                      y_train, y_valid)
     print('XGBoost tuned with Glove vectors : {}\tacc {}'.format(xgb_tuned_loss, xgb_tuned_score))
-    save_op(xgb_tuned_ctv, ids, 'xgb_tuned', 'ctv')
+    save_op(xgb_tuned_ctv, ids, 'xgb_tuned', 'ctv')"""

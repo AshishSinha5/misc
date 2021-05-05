@@ -4,6 +4,7 @@ import torch
 import pandas as pd
 import pickle
 import numpy as np
+import matplotlib.pyplot as plt
 from torch.utils.data import DataLoader
 import torch.nn.functional as F
 from model import LinearEmbeddingModel, entityEmbeddingModel, gloveEmbeddingModel
@@ -102,9 +103,9 @@ def get_dataset(train_file_path, test_file_path, valid_ratio):
         del y_valid[idx]
     update_embeddings(vocab)
     train_dataset = AuthorDataset(X_train, y_train, vocab, tokenizer, None, label_code, train=True,
-                                  glove=embeddings_index)
+                                  glove=None)
     valid_dataset = AuthorDataset(X_valid, y_valid, vocab, tokenizer, None, label_code, train=True,
-                                  glove=embeddings_index)
+                                  glove=None)
 
     return train_dataset, valid_dataset, vocab
 
@@ -114,7 +115,7 @@ def get_test_dataset(test_file_path, vocab):
     X_test = test_df['text']
     X_test = list(map(lambda x: preprocess(x), X_test))
     id = test_df['id']
-    test_dataset = AuthorDataset(X_test, None, vocab, tokenizer, id, label_code, train=False, glove=embeddings_index)
+    test_dataset = AuthorDataset(X_test, None, vocab, tokenizer, id, label_code, train=False, glove=None)
     return test_dataset
 
 
@@ -125,7 +126,7 @@ def train(model, dataloader, optimizer, criterion, epoch):
     start_time = time.time()
 
     for idx, (label, text) in enumerate(dataloader):
-        label, text = label.to(device), text.to(device)
+        label, text = label.to(device), text.to(device).long()
         predicted_label = model(text)
         loss = criterion(predicted_label, label)
         loss.backward()
@@ -151,7 +152,7 @@ def evaluate(model, dataloader, criterion):
     labels = []
     with torch.no_grad():
         for idx, (label, text) in enumerate(dataloader):
-            label, text = label.to(device), text.to(device)
+            label, text = label.to(device), text.to(device).long()
             predicted = model(text)
             total_loss += criterion(predicted, label)
             total_acc += (predicted.argmax(1) == label).sum().item()
@@ -160,8 +161,8 @@ def evaluate(model, dataloader, criterion):
             predictions.append(pmf)
             labels.append(label)
     print(pmf[0])
-    predictions = np.reshape([item for sublist in predictions for item in sublist.tolist()], (-1, 3))
-    labels = np.array([item for sublist in labels for item in sublist.tolist()])
+    # predictions = np.reshape([item for sublist in predictions for item in sublist.tolist()], (-1, 3))
+    # labels = np.array([item for sublist in labels for item in sublist.tolist()])
     # metric = multiclass_logloss(predictions, labels)
     del text
     return total_acc / total_count, total_loss
@@ -196,11 +197,11 @@ if __name__ == "__main__":
     parser.add_argument('--train_file_path', type=str, default='data/train.csv', help='train_file_path')
     parser.add_argument('--test_file_path', type=str, default='data/test.csv', help='test_file_path')
     parser.add_argument('--valid_ratio', type=float, default=0.1, help='proportion of validation samples')
-    parser.add_argument('--embsize', type=int, default=37, help='embedding size')
-    parser.add_argument('--epoch', type=int, default=20)
-    parser.add_argument('--batch_size', type=int, default=32)
-    parser.add_argument('--learning_rate', type=float, default=0.005489520509131124)
-    parser.add_argument('--init_range', type=float, default=0.34261292447576064, help='range for weight initialization')
+    parser.add_argument('--embsize', type=int, default=59, help='embedding size')
+    parser.add_argument('--epoch', type=int, default=50)
+    parser.add_argument('--batch_size', type=int, default=64)
+    parser.add_argument('--learning_rate', type=float, default=0.036208)
+    parser.add_argument('--init_range', type=float, default=0.46816, help='range for weight initialization')
 
     args = parser.parse_args()
 
@@ -212,35 +213,36 @@ if __name__ == "__main__":
     test_dataset = get_test_dataset(test_file_path, vocab)
 
     train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True,
-                              collate_fn=train_dataset.char_level_collate, drop_last=True)
+                              collate_fn=train_dataset.collate_function, drop_last=True)
     valid_loader = DataLoader(valid_dataset, batch_size=len(valid_dataset), shuffle=False,
-                              collate_fn=valid_dataset.char_level_collate)
+                              collate_fn=valid_dataset.collate_function)
     test_loader = DataLoader(test_dataset, batch_size=len(test_dataset), shuffle=False,
-                             collate_fn=test_dataset.char_level_collate)
+                             collate_fn=test_dataset.collate_function)
 
-    for i, (label, text) in enumerate(train_loader):
+    """for i, (label, text) in enumerate(train_loader):
         print(label)
         print(text.shape)
         print(text)
-        break
+        break"""
 
     num_class = 3
     vocab_size = len(vocab)
     emsize = args.embsize
     init_range = args.init_range
-    # model = LinearEmbeddingModel(vocab_size, num_class, num_layers=2, out_feats=[23, 102], dropouts=[0.50, 0.35],
-    #                             embed_dim=args.embsize, init_range=args.init_range).to(device)
+    model = LinearEmbeddingModel(vocab_size, num_class, num_layers=1, out_feats=[82], dropouts=[0.429],
+                                embed_dim=args.embsize, init_range=args.init_range).to(device)
 
     # model = entityEmbeddingModel(vocab_size, num_class).to(device)
-    model = gloveEmbeddingModel().to(device)
+    # model = gloveEmbeddingModel().to(device)
     epochs = args.epoch
     lr = args.learning_rate
     batch_size = args.batch_size
     total_acc = None
     criterion = torch.nn.CrossEntropyLoss()
-    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+    optimizer = torch.optim.RMSprop(model.parameters(), lr=lr)
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, 1, gamma=0.1)
-
+    loss = []
+    acc = []
     for epoch in range(1, epochs + 1):
         epoch_start_time = time.time()
         train(model, train_loader, optimizer, criterion, epoch)
@@ -255,5 +257,19 @@ if __name__ == "__main__":
                                                                    time.time() - epoch_start_time,
                                                                    acc_val, loss_val))
         print('-' * 59)
+        loss.append(loss_val)
+        acc.append(acc_val)
+    # test(model, test_loader)
+    plt.plot(loss)
+    plt.title("Loss")
+    plt.xlabel("Epochs")
+    plt.savefig('plots/EmbeddingBagloss.png')
+    plt.show()
 
-    test(model, test_loader)
+    plt.plot(acc)
+    plt.title("Accuracy")
+    plt.xlabel("Epochs")
+    plt.savefig('plots/EmbeddingBagacc.png')
+    plt.show()
+
+
