@@ -6,7 +6,7 @@ import logging
 
 
 def test():
-    logging.basicConfig(filename = "using-a-logger.log", level=logging.INFO)
+    logging.basicConfig(filename = "data/using-a-logger.log", level=logging.INFO)
     logging.info("started")
     for i in range(10):
         logging.info(f"{i}")
