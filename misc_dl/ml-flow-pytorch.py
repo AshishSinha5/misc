@@ -14,6 +14,10 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 import mlflow 
 import mlflow.pytorch
 
+# datetime 
+from datetime import datetime
+now = datetime.now()
+
 
 def load_iris_data(test_size):
     iris = load_iris()
@@ -76,6 +80,7 @@ def train_model(X_train, y_train, X_test, y_test, params):
     train_dl = DataLoader(train_ds, batch_size=batch_size)
 
     with mlflow.start_run() as run:
+        mlflow.set_tag("mlflow.runName", f"iris-classification-pytorch_{now.strftime('%Y-%m-%d_%H-%M-%S')}")
         for epoch in range(epochs):
             total_loss = 0
             total_accuracy = 0.0

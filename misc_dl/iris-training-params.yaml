@@ -1,0 +1,11 @@
+test-size : 0.2
+random-state : 42
+
+# Path: iris-training-params.yaml
+epochs : 10
+batch-size : 32
+learning-rate : 0.001
+validation-steps : 10
+
+
+
