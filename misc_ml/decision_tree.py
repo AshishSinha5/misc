@@ -8,7 +8,7 @@ class DecisionTree:
         self.tree = None
 
     def fit(self, X, y):
-        pass
+        self.tree = self._build_tree(X, y)
 
     def _build_tree(self, X, y, depth = 0):
         if len(set(y)) == 1 or (self.max_depth and depth >= self.max_depth) or len(X) == 0:
@@ -29,7 +29,6 @@ class DecisionTree:
             "left" : self._build_tree(left_X, left_y),
             "right" : self._build_tree(right_X, right_y)
         }
-
         return tree
     
     def _find_best_split(self, X, y):
@@ -72,8 +71,50 @@ class DecisionTree:
     def _entropy(self, y):
         counts = Counter(y)
         entropy = 0
-        for count in counts.values:
+        for count in counts.values():
             p = count/len(y)
             entropy -= p*math.log2(p)
 
         return entropy 
+    
+    def predict(self, X):
+        return [self._predict_single(x, self.tree) for x in X]
+
+    def _predict_single(self, x, tree):
+        if not isinstance(tree, dict):
+            return tree
+        
+        if x[tree['feature']] <= tree['value']:
+            return self._predict_single(x, tree['left'])
+
+        return self._predict_single(x, tree['right'])
+# Example usage
+X = [
+    [5.1, 3.5, 1.4, 0.2],
+    [4.9, 3.0, 1.4, 0.2],
+    [7.0, 3.2, 4.7, 1.4],
+    [6.4, 3.2, 4.5, 1.5],
+    [6.3, 3.3, 6.0, 2.5],
+    [5.8, 2.7, 5.1, 1.9]
+]
+
+y = ['setosa', 'setosa', 'versicolor', 'versicolor', 'virginica', 'virginica']
+
+dt = DecisionTree(max_depth=3)
+dt.fit(X, y)
+
+print("Decision Tree:")
+print(dt.tree)
+
+
+# Make predictions
+new_flowers = [
+    [5.0, 3.4, 1.5, 0.2],
+    [6.7, 3.1, 4.7, 1.5],
+    [6.3, 3.3, 6.0, 2.5],
+]
+
+predictions = dt.predict(new_flowers)
+print("\nPredictions:")
+for flower, prediction in zip(new_flowers, predictions):
+    print(f"Flower {flower}: {prediction}")
