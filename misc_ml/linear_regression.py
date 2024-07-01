@@ -79,23 +79,14 @@ class LinearRegrssion:
         
         return s
 
-    def plot_data(self, X, y):
-        y_pred = self.predict(X)
-
-        plt.scatter(X[:, 0], y)
-
-        plt.plot(X[:, 0], y_pred)
-        plt.show()
-
 
 # Example usage
 X, y = datasets.load_diabetes(return_X_y=True)
 X = X[:, :5]
-model = LinearRegrssion(learning_rate=0.001, iteration=1000)
+model = LinearRegrssion(learning_rate=0.001, iteration=1000, batch_size=64)
 model.fit(X, y)
 plt.plot(model.loss)
 plt.show()
-model.plot_data(X, y)
 print(model)
 
 
