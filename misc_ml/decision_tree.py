@@ -3,15 +3,21 @@ from collections import Counter
 
 
 class DecisionTree:
-    def __init__(self, max_depth=None):
+    def __init__(self, max_depth=None, criterion='entropy', min_samples_split = 2):
         self.max_depth = max_depth
+        self.criterion = criterion
+        self.min_samples_split = min_samples_split
         self.tree = None
 
     def fit(self, X, y):
         self.tree = self._build_tree(X, y)
 
     def _build_tree(self, X, y, depth = 0):
-        if len(set(y)) == 1 or (self.max_depth and depth >= self.max_depth) or len(X) == 0:
+        # stopping criterion
+        if len(set(y)) == 1 or\
+        (self.max_depth and depth >= self.max_depth) or\
+        (self.min_samples_split and len(y) < self.min_samples_split) or\
+        len(X) == 0:
             return Counter(y).most_common(1)[0][0] # return the most common element (mejority class voting)
         
 
@@ -36,7 +42,7 @@ class DecisionTree:
         best_feature = None
         best_value = None
 
-        current_entropy = self._entropy(y)
+        current_impuruty = self.impurity(y)
 
         # iterate through the X matrix
         # for all the features of the X 
@@ -55,10 +61,10 @@ class DecisionTree:
                 if len(left_y) == 0 or len(right_y) == 0:
                     continue
 
-                weighted_entropy = len(left_y)/len(y)*self._entropy(left_y) + len(right_y)/len(y)*self._entropy(right_y)
+                weighted_impurity = len(left_y)/len(y)*self.impurity(left_y) + len(right_y)/len(y)*self.impurity(right_y)
 
 
-                info_gain = current_entropy - weighted_entropy
+                info_gain = current_impuruty - weighted_impurity
 
                 if info_gain > best_gain:
                     best_gain = info_gain
@@ -67,6 +73,22 @@ class DecisionTree:
 
         return best_feature, best_value, best_gain
     
+    def impurity(self, y):
+        if self.criterion == 'gini':
+            return self._gini(y)
+        elif self.criterion == 'entropy':
+            return self._entropy(y)
+        else:
+            raise ValueError("Invalid criterion. Choose 'gini' or 'entropy'.")
+
+    def _gini(self, y):
+        counts = Counter(y)
+        gini = 0
+        for count in counts.values():
+            p = count/len(y)
+            gini -= p**2
+
+        return gini  
 
     def _entropy(self, y):
         counts = Counter(y)
@@ -74,7 +96,6 @@ class DecisionTree:
         for count in counts.values():
             p = count/len(y)
             entropy -= p*math.log2(p)
-
         return entropy 
     
     def predict(self, X):
@@ -100,7 +121,7 @@ X = [
 
 y = ['setosa', 'setosa', 'versicolor', 'versicolor', 'virginica', 'virginica']
 
-dt = DecisionTree(max_depth=3)
+dt = DecisionTree(max_depth=3 , criterion="gini")
 dt.fit(X, y)
 
 print("Decision Tree:")
