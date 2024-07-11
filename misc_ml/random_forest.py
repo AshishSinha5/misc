@@ -7,10 +7,10 @@ from sklearn.utils import shuffle, resample
 
 class RandomForest:
     def __init__(self, n_estimators=100, max_depth=5, min_samples_split=2, max_features='sqrt', bootstrap=True):
-        self.n_estimators = n_estimators
-        self.max_depth = max_depth
-        self.min_samples_split = min_samples_split
-        self.max_features = max_features
+        self.n_estimators = n_estimators # number of trees
+        self.max_depth = max_depth # maximum depth of each tree in the forest, prevent overfitting
+        self.min_samples_split = min_samples_split # minimum number of samples required to split an internal node
+        self.max_features = max_features # maximum number of features to consider for the best split
         self.bootstrap = bootstrap  
         self.estimators = []
 
