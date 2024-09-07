@@ -60,7 +60,7 @@ class MLP:
         Returns:
             The output matrix after applying the relu activation function
         """
-        return np.where(X > 0, X, 0)
+        return np.maximum(0, X)
     
     def _softmax(self, X):
         """

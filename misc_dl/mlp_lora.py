@@ -104,7 +104,7 @@ def test(model, test_loader):
             history["test_loss"].append(loss.item())
             history["test_acc"].append(accuracy.item())
             print(f"Test Loss = {loss.item()} Test Accuracy = {accuracy.item()}")
-            
+
 
     return history
 
@@ -120,7 +120,6 @@ plt.plot(test_history["test_loss"], label="Test Loss")
 plt.plot(test_history["test_acc"], label="Test Accuracy")
 
 plt.legend()
-
 plt.show()
 
                 
