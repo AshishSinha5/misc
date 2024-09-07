@@ -1,6 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from collections import defaultdict
+from tqdm import tqdm
 class env:
     def __init__(self, k=10):
         self.k = k 
@@ -19,7 +20,6 @@ class env:
     def play(self, action):
         assert 0 <= action < self.k
         return np.random.normal(self.means[action], 0)
-
 
 class agent:
     def __init__(self, eps = 0.1, eps_decay = 0.99999, k = 10):
@@ -46,7 +46,7 @@ def simulate(args):
     eps_decay = args.eps_decay
     k = args.k
     num_ep = args.num_ep
-
+    cummulative_eps_reward = defaultdict(list)
     for eps in [0.1, 0.01, 0]:
         env_ = env(k)
         agent_ = agent(eps, eps_decay, k)
@@ -58,15 +58,24 @@ def simulate(args):
             average_reward += reward
             cummulative_rewards.append(average_reward/(ep + 1))
             agent_.learn(action, reward)
-            if ep%100 == 0:
-                print(f"Ep = {ep}, Average Reward = {cummulative_rewards[-1]}")
-        plt.plot(cummulative_rewards, label=f"{eps=}")
-    plt.legend()
-    plt.savefig(f"plots/k_armed_stationary.png")
+        cummulative_eps_reward[eps] = cummulative_rewards
+    return cummulative_eps_reward
 
 def main(args):
-    simulate(args)
-
+    average_rewards_eps = {} 
+    for sample in tqdm(range(2000)):
+        cummulative_eps_reward = simulate(args)
+        for k, v in cummulative_eps_reward.items():
+            if k not in average_rewards_eps:
+                average_rewards_eps[k] = [0]*len(v)
+            average_rewards_eps[k] = [r1 + r2 for r1, r2 in zip(average_rewards_eps[k], v)]
+    for k,v in average_rewards_eps.items():
+        average_rewards_eps[k] = [v_/2000 for v_ in v] 
+        plt.plot(average_rewards_eps[k], label = k)
+    plt.legend()
+    plt.xlabel("steps")
+    plt.ylabel("average rewards")
+    plt.savefig("plots/ave_rewards.png")
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()
@@ -74,7 +83,6 @@ if __name__ == "__main__":
     parser.add_argument("--eps", type=float, default=0.1, required=False)
     parser.add_argument("--k", type=int, default=10, required=False)
     parser.add_argument("--eps_decay", type=float, default=0.9999, required=False)
-
     args = parser.parse_args()
     main(args)
 
