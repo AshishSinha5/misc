@@ -49,6 +49,8 @@ def run_experiment(agent, environment, num_steps):
     average_rewards = [0]*num_steps
     average_optimal_actions = [0]*num_steps
     for i in tqdm(range(1000)):
+        agent.reset()
+        environment.reset()
         total_reward = 0
         rewards = []
         optimal_actions = []
@@ -94,7 +96,6 @@ plt.plot(np.cumsum(rewards)/(np.arange(num_steps) + 1), label="greedy")
 plt.title("Average reward over time")
 plt.ylabel("Average Reawrd over time")
 plt.xlabel("Num Steps")
-plt.ylim(0, 4)
 plt.legend()
 plt.savefig("plots/non_stationary_bandit.png")
 plt.show()
