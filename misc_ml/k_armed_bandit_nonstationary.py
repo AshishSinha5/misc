@@ -45,18 +45,25 @@ class NonStationaryAgent:
         self.q_values[action] += self.alpha * (reward - self.q_values[action])
         
 def run_experiment(agent, environment, num_steps):
-    total_reward = 0
-    rewards = []
-    optimal_actions = []
-    for _ in tqdm(range(num_steps)):
-        optimal_arms = environment.get_optimal_actions()
-        action = agent.choose_action()
-        reward = environment.pull(action)
-        agent.update(action, reward)
-        rewards.append(reward)
-        total_reward += reward
-        optimal_actions.append(1 if optimal_arms == action else 0)
-    return total_reward, rewards, optimal_actions
+    average_total_reward = 0
+    average_rewards = [0]*num_steps
+    average_optimal_actions = [0]*num_steps
+    for i in tqdm(range(1000)):
+        total_reward = 0
+        rewards = []
+        optimal_actions = []
+        for _ in range(num_steps):
+            optimal_arms = environment.get_optimal_actions()
+            action = agent.choose_action()
+            reward = environment.pull(action)
+            agent.update(action, reward)
+            rewards.append(reward)
+            total_reward += reward
+            optimal_actions.append(1 if optimal_arms == action else 0)
+        average_total_reward += total_reward/1000
+        average_rewards = [ar + r/1000 for ar, r in zip(average_rewards, rewards)]
+        average_optimal_actions = [aoa + oa/1000 for aoa, oa in zip(average_optimal_actions, optimal_actions)]
+    return average_total_reward, average_rewards, average_optimal_actions
 
 
 num_arms = 10
@@ -72,11 +79,11 @@ total_reward, rewards, optimal_actions_eps = run_experiment(agent, bandit, num_s
 
 plt.plot(np.cumsum(rewards)/(np.arange(num_steps) + 1), label="eps_greedy")
 
-print(f"{total_reward = }")
+print(f"for the nonstationary process with epsilon greedy {total_reward = }")
 print(f"{agent.q_values = }")
 
 epsilon = 0
-init_val = 5
+init_val = 0
 
 bandit = NonStationaryBandit(num_arms)
 agent = NonStationaryAgent(num_arms, alpha, epsilon, init_val)
@@ -84,17 +91,20 @@ agent = NonStationaryAgent(num_arms, alpha, epsilon, init_val)
 total_reward, rewards, optimal_actions_greedy = run_experiment(agent, bandit, num_steps)
 
 plt.plot(np.cumsum(rewards)/(np.arange(num_steps) + 1), label="greedy")
+plt.title("Average reward over time")
 plt.ylabel("Average Reawrd over time")
 plt.xlabel("Num Steps")
+plt.ylim(0, 4)
 plt.legend()
 plt.savefig("plots/non_stationary_bandit.png")
 plt.show()
-print(f"{total_reward = }")
+print(f"for the greedy agent {total_reward = }")
 print(f"{agent.q_values = }")
 
-plt.plot(np.cumsum(optimal_actions_eps)/(np.arange(num_steps) + 1)*100, label="eps with Q1 = 0")
-plt.plot(np.cumsum(optimal_actions_greedy)/(np.arange(num_steps) + 1)*100, label="greedy with Q1 = 5")
+plt.plot(np.cumsum(optimal_actions_eps)/(np.arange(num_steps) + 1)*100, label=f"eps with Q1 ={init_val} eps = {epsilon}")
+plt.plot(np.cumsum(optimal_actions_greedy)/(np.arange(num_steps) + 1)*100, label=f"greedy with Q1 = {init_val} eps = {epsilon}")
 plt.ylabel("Optimal Actions over time")
 plt.xlabel("Num Steps")
 plt.legend()
+plt.show()
 plt.savefig("plots/optimal_actions.png")
