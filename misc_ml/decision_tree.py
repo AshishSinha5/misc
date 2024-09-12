@@ -83,11 +83,10 @@ class DecisionTree:
 
     def _gini(self, y):
         counts = Counter(y)
-        gini = 0
+        gini = 1
         for count in counts.values():
             p = count/len(y)
             gini -= p**2
-
         return gini  
 
     def _entropy(self, y):
