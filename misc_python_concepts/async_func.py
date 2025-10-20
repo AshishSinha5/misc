@@ -60,3 +60,18 @@ async def run_tasks_sequentially():
     print(f"All tasks completed in {end_time - start_time:.2f} seconds.")
 asyncio.run(run_tasks_sequentially())
 
+
+# another example of async function with exception handling
+async def faulty_task():
+    print("Faulty task started.")
+    await asyncio.sleep(1)
+    raise ValueError("An error occurred in faulty_task.")
+
+async def run_faulty_task():
+    try:
+        await faulty_task()
+    except ValueError as e:
+        print(f"Caught an exception: {e}")
+
+asyncio.run(run_faulty_task())
+
